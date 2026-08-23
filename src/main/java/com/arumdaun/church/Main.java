@@ -53,39 +53,45 @@ public class Main extends JFrame {
     private static final Path CLIENT_DATA_FILE = Paths.get("data", "client-data.ser");
     private static final Path CEMETERY_DATA_FILE = Paths.get("data", "cemetery-records.ser");
     private final CemeterySystem system;
+
     private final JTextArea logArea = new JTextArea();
+
     private final DefaultTableModel lotTableModel = new DefaultTableModel(
-            new Object[] { "Lot", "Status", "Price", "Lot Information" }, 0) {
+            new Object[] { "Lot Id", "Status", "Price", "Lot Information" }, 0) {
         @Override
         public boolean isCellEditable(int row, int column) {
             return false;
         }
     };
     private final JTable lotTable = new JTable(lotTableModel);
+
     private final DefaultTableModel lotStatusTableModel = new DefaultTableModel(
-            new Object[] { "Lot ID", "Price", "Status", "Client ID", "Name", "Balance" }, 0) {
+            new Object[] { "Lot Id", "Price", "Status", "Client Id", "Client Name", "Balance" }, 0) {
         @Override
         public boolean isCellEditable(int row, int column) {
             return false;
         }
     };
     private final JTable lotStatusTable = new JTable(lotStatusTableModel);
-    private final DefaultTableModel paymentTableModel = new DefaultTableModel(
-            new Object[] { "Lot ID", "Client ID", "Name", "Type", "Method", "Amount", "Date" }, 0) {
-        @Override
-        public boolean isCellEditable(int row, int column) {
-            return false;
-        }
-    };
-    private final JTable paymentTable = new JTable(paymentTableModel);
+
     private final DefaultTableModel clientTableModel = new DefaultTableModel(
-            new Object[] { "Client ID", "Name", "Lots Owned", "Phone 1", "Phone 2", "Status", "Delete" }, 0) {
+            new Object[] { "Client Id", "Client Name", "Lots Owned", "Phone 1", "Phone 2", "Status", "Delete" }, 0) {
         @Override
         public boolean isCellEditable(int row, int column) {
             return column == 6;
         }
     };
     private final JTable clientTable = new JTable(clientTableModel);
+
+    private final DefaultTableModel paymentTableModel = new DefaultTableModel(
+            new Object[] { "Lot Id", "Client Id", "Client Name", "Type", "Method", "Amount", "Date" }, 0) {
+        @Override
+        public boolean isCellEditable(int row, int column) {
+            return false;
+        }
+    };
+
+    private final JTable paymentTable = new JTable(paymentTableModel);
     private final JCheckBox showDeletedClientsCheckBox = new JCheckBox("Show Deleted Clients");
     private JFrame registrationFrame;
     private JTabbedPane tabs;
@@ -179,7 +185,7 @@ public class Main extends JFrame {
                 Files.createDirectories(parent);
             }
             try (ObjectOutputStream output = new ObjectOutputStream(Files.newOutputStream(CLIENT_DATA_FILE))) {
-                output.writeObject(new ClientData(value.clients, value.nextClientId));
+                output.writeObject(new Client.ClientData(value.clients, value.nextClientId));
             }
             try (ObjectOutputStream output = new ObjectOutputStream(Files.newOutputStream(CEMETERY_DATA_FILE))) {
                 output.writeObject(new CemeteryData(value.lots, value.purchases, value.payments));
@@ -192,17 +198,17 @@ public class Main extends JFrame {
     }
 
     private CemeterySystem readSeparatedSystem() throws IOException, ClassNotFoundException {
-        ClientData clientData;
+        Client.ClientData clientData;
         CemeteryData cemeteryData;
         try (ObjectInputStream input = new ObjectInputStream(Files.newInputStream(CLIENT_DATA_FILE))) {
-            clientData = (ClientData) input.readObject();
+            clientData = (Client.ClientData) input.readObject();
         }
         try (ObjectInputStream input = new ObjectInputStream(Files.newInputStream(CEMETERY_DATA_FILE))) {
             cemeteryData = (CemeteryData) input.readObject();
         }
         CemeterySystem result = new CemeterySystem();
-        result.clients.putAll(clientData.clients);
-        result.nextClientId = clientData.nextClientId;
+        result.clients.putAll(clientData.getClients());
+        result.nextClientId = clientData.getNextClientId();
         result.lots.putAll(cemeteryData.lots);
         result.purchases.addAll(cemeteryData.purchases);
         result.payments.addAll(cemeteryData.payments);
@@ -848,17 +854,6 @@ public class Main extends JFrame {
         system.purchaseLots(101, List.of("B-201"), 4800.0, LocalDate.of(2026, 8, 2));
     }
 
-    private static class ClientData implements Serializable {
-        private static final long serialVersionUID = 1L;
-        private final Map<Integer, Client> clients;
-        private final int nextClientId;
-
-        ClientData(Map<Integer, Client> clients, int nextClientId) {
-            this.clients = new LinkedHashMap<>(clients);
-            this.nextClientId = nextClientId;
-        }
-    }
-
     private static class CemeteryData implements Serializable {
         private static final long serialVersionUID = 1L;
         private final Map<String, CemeteryLot> lots;
@@ -1260,135 +1255,6 @@ public class Main extends JFrame {
 
         private String formatMoney(double value) {
             return String.format(Locale.US, "$%,.2f", value);
-        }
-    }
-
-    static class Client implements Serializable {
-        private static final long serialVersionUID = 1L;
-        private final int clientId;
-        private String koreanName;
-        private String englishSurname;
-        private String englishGivenName;
-        private String englishMiddleName;
-        private String phone1;
-        private String phone2;
-        private String streetAddress;
-        private String city;
-        private String state;
-        private String zipCode;
-        private boolean deleted;
-        private LocalDate deletedDate;
-        private final List<PurchaseRecord> purchases = new ArrayList<>();
-
-        public Client(int clientId, String koreanName, String englishSurname, String englishGivenName,
-                String englishMiddleName, String phone1, String phone2, String streetAddress, String city,
-                String state, String zipCode) {
-            this.clientId = clientId;
-            this.koreanName = koreanName;
-            this.englishSurname = englishSurname;
-            this.englishGivenName = englishGivenName;
-            this.englishMiddleName = englishMiddleName;
-            this.phone1 = phone1;
-            this.phone2 = phone2;
-            this.streetAddress = streetAddress == null ? "" : streetAddress;
-            this.city = city == null ? "" : city;
-            this.state = state == null ? "" : state;
-            this.zipCode = zipCode == null ? "" : zipCode;
-            this.deleted = false;
-            this.deletedDate = null;
-        }
-
-        public int getClientId() {
-            return clientId;
-        }
-
-        public String getKoreanName() {
-            return koreanName;
-        }
-
-        public String getDisplayName() {
-            return koreanName + " / " + getEnglishFullName();
-        }
-
-        public String getEnglishFullName() {
-            String middle = englishMiddleName == null || englishMiddleName.isEmpty()
-                    ? ""
-                    : " " + englishMiddleName;
-            return englishSurname + ", " + englishGivenName + middle;
-        }
-
-        public String getPhone1() {
-            return phone1;
-        }
-
-        public String getPhone2() {
-            return phone2;
-        }
-
-        public String getEnglishSurname() {
-            return englishSurname;
-        }
-
-        public String getEnglishGivenName() {
-            return englishGivenName;
-        }
-
-        public String getEnglishMiddleName() {
-            return englishMiddleName;
-        }
-
-        public String getStreetAddress() {
-            return streetAddress;
-        }
-
-        public String getCity() {
-            return city;
-        }
-
-        public String getState() {
-            return state;
-        }
-
-        public String getZipCode() {
-            return zipCode;
-        }
-
-        public boolean isDeleted() {
-            return deleted;
-        }
-
-        public LocalDate getDeletedDate() {
-            return deletedDate;
-        }
-
-        public void softDelete() {
-            deleted = true;
-            deletedDate = LocalDate.now();
-        }
-
-        public void updateDetails(String koreanName, String englishSurname, String englishGivenName,
-                String englishMiddleName, String phone1, String phone2, String streetAddress,
-                String city, String state, String zipCode) {
-            this.koreanName = koreanName;
-            this.englishSurname = englishSurname;
-            this.englishGivenName = englishGivenName;
-            this.englishMiddleName = englishMiddleName;
-            this.phone1 = phone1;
-            this.phone2 = phone2;
-            this.streetAddress = streetAddress;
-            this.city = city;
-            this.state = state;
-            this.zipCode = zipCode;
-        }
-
-        public void addPurchase(PurchaseRecord purchase) {
-            purchases.add(purchase);
-        }
-
-        @Override
-        public String toString() {
-            return "Client ID: " + clientId + " | Name: " + getDisplayName() +
-                    " | Phones: " + phone1 + ", " + (phone2 == null ? "" : phone2);
         }
     }
 
