@@ -3,9 +3,7 @@ package com.arumdaun.church;
 import java.io.Serializable;
 import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
 public class Client implements Serializable {
     private static final long serialVersionUID = 1L;
@@ -22,7 +20,7 @@ public class Client implements Serializable {
     private String zipCode;
     private boolean deleted;
     private LocalDate deletedDate;
-    private final List<Main.PurchaseRecord> purchases = new ArrayList<>();
+    private final List<Purchase> purchases = new ArrayList<>();
 
     public Client(int clientId, String koreanName, String englishSurname, String englishGivenName,
             String englishMiddleName, String phone1, String phone2, String streetAddress, String city,
@@ -125,7 +123,7 @@ public class Client implements Serializable {
         this.zipCode = zipCode;
     }
 
-    public void addPurchase(Main.PurchaseRecord purchase) {
+    public void addPurchase(Purchase purchase) {
         purchases.add(purchase);
     }
 
@@ -135,22 +133,4 @@ public class Client implements Serializable {
                 " | Phones: " + phone1 + ", " + (phone2 == null ? "" : phone2);
     }
 
-    public static class ClientData implements Serializable {
-        private static final long serialVersionUID = 1L;
-        private final Map<Integer, Client> clients;
-        private final int nextClientId;
-
-        ClientData(Map<Integer, Client> clients, int nextClientId) {
-            this.clients = new LinkedHashMap<>(clients);
-            this.nextClientId = nextClientId;
-        }
-
-        Map<Integer, Client> getClients() {
-            return clients;
-        }
-
-        int getNextClientId() {
-            return nextClientId;
-        }
-    }
 }
