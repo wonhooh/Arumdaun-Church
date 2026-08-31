@@ -18,6 +18,7 @@ import java.nio.file.Paths;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -49,7 +50,6 @@ public class Main extends JFrame {
     private static final Path LEGACY_DATA_FILE = Paths.get("data", "cemetery-data.ser");
     private static final Path CLIENT_DATA_FILE = Paths.get("data", "client-data.ser");
     private static final Path CEMETERY_DATA_FILE = Paths.get("data", "cemetery-records.ser");
-    private final CemeterySystem system = null;
 
     private final JTextArea logArea = new JTextArea();
 
@@ -91,7 +91,7 @@ public class Main extends JFrame {
     private final JTable paymentTable = new JTable(paymentTableModel);
     private final JCheckBox showDeletedClientsCheckBox = new JCheckBox("Show Deleted Clients");
     private JFrame registrationFrame;
-    private final JTabbedPane tabs;
+    public final JTabbedPane tabs;
     private final JPanel purchaseCancellationTab;
     private JRadioButton purchaseModeButton;
     private JRadioButton cancelModeButton;
@@ -123,16 +123,14 @@ public class Main extends JFrame {
     }
 
     public Main() {
-        system = loadSystem();
+        CemeterySystem system = loadSystem();
         system.reconcileLotOwnership();
         if (system.isEmpty()) {
-            seedDemoData();
-            saveSystem();
-        } else {
-            saveSystem();
+            seedDemoData(system);
         }
+        saveSystem(system);
         clientIdField.setEditable(false);
-        clientIdField.setText(String.valueOf(system.getNextClientId()));
+        // clientIdField.setText(String.valueOf(system.getNextClientId()));
         setTitle("Arumdaun Church Cemetery Management");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setSize(1180, 760);
@@ -140,19 +138,19 @@ public class Main extends JFrame {
         setLayout(new BorderLayout(12, 12));
 
         tabs = new JTabbedPane();
-        tabs.addTab("Lots", new OperationsTab(this));
-        tabs.addTab("Lot Statuses", new LotStatusTab(this));
-        tabs.addTab("Clients", new ClientsTab(this));
+        tabs.addTab("Lots", new OperationsTab(system, this));
+        tabs.addTab("Lot Statuses", new LotStatusTab(system, this));
+        tabs.addTab("Clients", new ClientsTab(system, this));
         tabs.addTab("Payment History", new PaymentHistoryTab(this));
-        purchaseCancellationTab = new PurchaseCancellationTab(this);
+        purchaseCancellationTab = new PurchaseCancellationTab(system, this);
         tabs.addTab("Purchase & Cancellation", purchaseCancellationTab);
         add(tabs, BorderLayout.CENTER);
 
-        refreshLotList();
-        refreshClientTable();
-        refreshPaymentTable();
-        refreshPurchaseSelectors();
-        refreshLotStatusTable();
+        refreshLotList(system);
+        refreshClientTable(system);
+        refreshPaymentTable(system);
+        refreshPurchaseSelectors(system);
+        refreshLotStatusTable(system);
     }
 
     private CemeterySystem loadSystem() {
@@ -171,10 +169,6 @@ public class Main extends JFrame {
         return new CemeterySystem();
     }
 
-    private void saveSystem() {
-        saveSystem(system);
-    }
-
     private void saveSystem(CemeterySystem value) {
         try {
             Path parent = CLIENT_DATA_FILE.getParent();
@@ -182,10 +176,10 @@ public class Main extends JFrame {
                 Files.createDirectories(parent);
             }
             try (ObjectOutputStream output = new ObjectOutputStream(Files.newOutputStream(CLIENT_DATA_FILE))) {
-                output.writeObject(new ClientData(value.clients, value.nextClientId));
+                output.writeObject(new ClientData(value.getClients()));
             }
             try (ObjectOutputStream output = new ObjectOutputStream(Files.newOutputStream(CEMETERY_DATA_FILE))) {
-                output.writeObject(new CemeteryData(value.lots, value.purchases, value.payments));
+                output.writeObject(new CemeteryData(value.getLots(), value.getPurchases(), value.getPayments()));
             }
         } catch (IOException exception) {
             JOptionPane.showMessageDialog(this,
@@ -204,11 +198,10 @@ public class Main extends JFrame {
             cemeteryData = (CemeteryData) input.readObject();
         }
         CemeterySystem result = new CemeterySystem();
-        result.getClients().addAll(clientData.getClients().values());
-        result.nextClientId = clientData.getNextClientId();
-        result.lots.putAll(cemeteryData.lots);
-        result.getPurchases().addAll(cemeteryData.purchases);
-        result.payments.addAll(cemeteryData.payments);
+        result.setClients(clientData.getClients());
+        result.setLots(cemeteryData.getLots());
+        result.setPurchases(cemeteryData.getPurchases());
+        result.setPayments(cemeteryData.getPayments());
         return result;
     }
 
@@ -218,70 +211,7 @@ public class Main extends JFrame {
         }
     }
 
-    JPanel createLotPanel() {
-        JPanel panel = new JPanel(new BorderLayout());
-        panel.setBorder(BorderFactory.createTitledBorder("Cemetery Lots"));
-        lotTable.setRowHeight(28);
-        lotTable.setAutoCreateRowSorter(true);
-        lotTable.getColumnModel().getColumn(0).setPreferredWidth(90);
-        lotTable.getColumnModel().getColumn(1).setPreferredWidth(110);
-        lotTable.getColumnModel().getColumn(2).setPreferredWidth(100);
-        lotTable.getColumnModel().getColumn(3).setPreferredWidth(320);
-        lotTable.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mouseClicked(MouseEvent event) {
-                if (event.getClickCount() == 1) {
-                    openLotInTransactionTab(lotTable, lotTableModel);
-                }
-            }
-        });
-        panel.add(new JScrollPane(lotTable), BorderLayout.CENTER);
-        return panel;
-    }
-
-    private void openLotInTransactionTab(JTable sourceTable, DefaultTableModel sourceModel) {
-        int selectedRow = sourceTable.getSelectedRow();
-        if (selectedRow < 0 || transactionButton == null) {
-            return;
-        }
-        int modelRow = sourceTable.convertRowIndexToModel(selectedRow);
-        String lotNumber = sourceModel.getValueAt(modelRow, 0).toString();
-        CemeterySystem.CemeteryLot lot = system.getLot(lotNumber);
-        if (lot == null) {
-            return;
-        }
-        boolean purchaseMode = !lot.isSold();
-        if (purchaseMode) {
-            transactionClientIdField.setText("");
-            purchaseModeButton.setSelected(true);
-        } else {
-            transactionClientIdField.setText(String.valueOf(lot.getClientId()));
-            cancelModeButton.setSelected(true);
-        }
-        updateTransactionButton(transactionButton, purchaseMode);
-        purchaseLotCombo.setSelectedItem(lotNumber);
-        updateTransactionClientName();
-        tabs.setSelectedComponent(purchaseCancellationTab);
-    }
-
-    JPanel createLotStatusPanel() {
-        JPanel panel = new JPanel(new BorderLayout());
-        panel.setBorder(BorderFactory.createTitledBorder("Lot Statuses"));
-        lotStatusTable.setAutoCreateRowSorter(true);
-        lotStatusTable.setRowHeight(28);
-        lotStatusTable.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mouseClicked(MouseEvent event) {
-                if (event.getClickCount() == 1) {
-                    openLotInTransactionTab(lotStatusTable, lotStatusTableModel);
-                }
-            }
-        });
-        panel.add(new JScrollPane(lotStatusTable), BorderLayout.CENTER);
-        return panel;
-    }
-
-    JPanel createPurchaseCancellationPanel() {
+    JPanel createPurchaseCancellationPanel(CemeterySystem system) {
         JPanel panel = new JPanel(new BorderLayout(12, 12));
         panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
         purchaseModeButton = new JRadioButton("Purchase a lot", true);
@@ -308,39 +238,39 @@ public class Main extends JFrame {
         addField(fields, constraints, 0, 5, "Transaction Date (YYYY-MM-DD):", purchaseDateField);
 
         transactionButton = new JButton("Purchase");
-        transactionButton.addActionListener(e -> processPurchaseCancellation(purchaseModeButton.isSelected()));
+        transactionButton.addActionListener(e -> processPurchaseCancellation(system, purchaseModeButton.isSelected()));
         constraints.gridx = 0;
         constraints.gridy = 6;
         constraints.gridwidth = 2;
         fields.add(transactionButton, constraints);
         transactionClientIdField.addActionListener(e -> {
-            updateTransactionClientName();
-            updateTransactionButton(transactionButton, purchaseModeButton.isSelected());
+            updateTransactionClientName(system);
+            updateTransactionButton(system, transactionButton, purchaseModeButton.isSelected());
         });
         purchaseModeButton.addActionListener(e -> {
-            updateTransactionButton(transactionButton, true);
-            refreshPurchaseLotSelector();
+            updateTransactionButton(system, transactionButton, true);
+            refreshPurchaseLotSelector(system);
         });
         cancelModeButton.addActionListener(e -> {
-            updateTransactionButton(transactionButton, false);
+            updateTransactionButton(system, transactionButton, false);
         });
         panel.add(fields, BorderLayout.CENTER);
         return panel;
     }
 
-    private void updateTransactionClientName() {
-        Client client = findTransactionClient();
+    private void updateTransactionClientName(CemeterySystem system) {
+        Client client = findTransactionClient(system);
         transactionClientNameLabel
                 .setText(client == null ? " " : client.getDisplayName());
     }
 
-    private void updateTransactionButton(JButton button, boolean purchaseMode) {
+    private void updateTransactionButton(CemeterySystem system, JButton button, boolean purchaseMode) {
         button.setText(purchaseMode ? "Purchase" : "Cancel");
         purchaseLotCombo.removeAllItems();
         if (purchaseMode) {
-            refreshPurchaseLotSelector();
+            refreshPurchaseLotSelector(system);
         } else {
-            Client client = findTransactionClient();
+            Client client = findTransactionClient(system);
             if (client != null) {
                 for (Purchase purchase : system.getActivePurchasesForClient(client.getClientId())) {
                     for (CemeterySystem.CemeteryLot lot : purchase.getLots()) {
@@ -351,9 +281,9 @@ public class Main extends JFrame {
         }
     }
 
-    private void processPurchaseCancellation(boolean purchaseMode) {
+    private void processPurchaseCancellation(CemeterySystem system, boolean purchaseMode) {
         try {
-            Client client = findTransactionClient();
+            Client client = findTransactionClient(system);
             String selectedLot = (String) purchaseLotCombo.getSelectedItem();
             String dateValue = purchaseDateField.getText().trim();
             double amount = parseRequiredAmount(paymentAmountField.getText().trim());
@@ -365,23 +295,23 @@ public class Main extends JFrame {
             }
             LocalDate transactionDate = parseRequiredDate(dateValue);
             if (purchaseMode) {
-                openRegistrationWindow();
+                openRegistrationWindow(system);
                 system.purchaseLots(client.getClientId(), List.of(selectedLot), amount, transactionDate);
-                saveSystem();
+                saveSystem(system);
             } else {
                 system.cancelLot(client.getClientId(), selectedLot, transactionDate);
-                saveSystem();
+                saveSystem(system);
             }
-            refreshLotList();
-            refreshPaymentTable();
-            refreshPurchaseSelectors();
-            refreshLotStatusTable();
+            refreshLotList(system);
+            refreshPaymentTable(system);
+            refreshPurchaseSelectors(system);
+            refreshLotStatusTable(system);
         } catch (Exception ex) {
             JOptionPane.showMessageDialog(this, ex.getMessage(), "Transaction failed", JOptionPane.ERROR_MESSAGE);
         }
     }
 
-    private Client findTransactionClient() {
+    private Client findTransactionClient(CemeterySystem system) {
         try {
             return system.getClient(Integer.parseInt(transactionClientIdField.getText().trim()));
         } catch (NumberFormatException exception) {
@@ -389,7 +319,7 @@ public class Main extends JFrame {
         }
     }
 
-    JPanel createClientsPanel() {
+    JPanel createClientsPanel(CemeterySystem system) {
         JPanel panel = new JPanel(new BorderLayout(10, 10));
         panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
         clientTable.setSelectionMode(javax.swing.ListSelectionModel.SINGLE_SELECTION);
@@ -403,17 +333,17 @@ public class Main extends JFrame {
         clientTable.getColumnModel().getColumn(5).setPreferredWidth(100);
         clientTable.getColumnModel().getColumn(6).setPreferredWidth(70);
         clientTable.getColumnModel().getColumn(6).setCellRenderer(new DeleteButtonRenderer());
-        clientTable.getColumnModel().getColumn(6).setCellEditor(new DeleteButtonEditor());
+        clientTable.getColumnModel().getColumn(6).setCellEditor(new DeleteButtonEditor(system));
         clientTable.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent event) {
                 int clickedColumn = clientTable.columnAtPoint(event.getPoint());
                 if (event.getClickCount() == 1 && clickedColumn != 6) {
-                    openSelectedClient();
+                    openSelectedClient(system);
                 }
             }
         });
-        showDeletedClientsCheckBox.addActionListener(e -> refreshClientTable());
+        showDeletedClientsCheckBox.addActionListener(e -> refreshClientTable(system));
         panel.add(new JScrollPane(clientTable), BorderLayout.CENTER);
         JPanel controls = new JPanel(new FlowLayout(FlowLayout.LEFT));
         controls.add(showDeletedClientsCheckBox);
@@ -423,23 +353,23 @@ public class Main extends JFrame {
         return panel;
     }
 
-    private void softDeleteClient(int clientId) {
+    private void softDeleteClient(CemeterySystem system, int clientId) {
         Client client = system.getClient(clientId);
         if (client == null || client.isDeleted()) {
             return;
         }
         system.softDeleteClient(clientId);
-        refreshClientTable();
-        refreshPurchaseSelectors();
-        saveSystem();
+        refreshClientTable(system);
+        refreshPurchaseSelectors(system);
+        saveSystem(system);
     }
 
-    private void refreshPurchaseSelectors() {
-        refreshPurchaseLotSelector();
-        updateTransactionClientName();
+    private void refreshPurchaseSelectors(CemeterySystem system) {
+        refreshPurchaseLotSelector(system);
+        updateTransactionClientName(system);
     }
 
-    private void refreshPurchaseLotSelector() {
+    private void refreshPurchaseLotSelector(CemeterySystem system) {
         purchaseLotCombo.removeAllItems();
         for (CemeterySystem.CemeteryLot lot : system.getAvailableLots()) {
             purchaseLotCombo.addItem(lot.getLotNumber());
@@ -464,7 +394,7 @@ public class Main extends JFrame {
         return panel;
     }
 
-    private void refreshClientTable() {
+    private void refreshClientTable(CemeterySystem system) {
         clientTableModel.setRowCount(0);
         for (Client client : system.getClients(showDeletedClientsCheckBox.isSelected())) {
             clientTableModel.addRow(new Object[] {
@@ -475,7 +405,7 @@ public class Main extends JFrame {
         }
     }
 
-    private void refreshPaymentTable() {
+    private void refreshPaymentTable(CemeterySystem system) {
         paymentTableModel.setRowCount(0);
         for (Payment payment : system.getPayments()) {
             Client client = system.getClient(payment.getClientId());
@@ -486,7 +416,7 @@ public class Main extends JFrame {
         }
     }
 
-    private void openSelectedClient() {
+    private void openSelectedClient(CemeterySystem system) {
         int selectedRow = clientTable.getSelectedRow();
         if (selectedRow < 0) {
             return;
@@ -495,17 +425,17 @@ public class Main extends JFrame {
         int clientId = (Integer) clientTableModel.getValueAt(modelRow, 0);
         Client client = system.getClient(clientId);
         if (client != null) {
-            new ClientDetailFrame(client).setVisible(true);
+            new ClientDetailFrame(system, client).setVisible(true);
         }
     }
 
-    private void openRegistrationWindow() {
+    private void openRegistrationWindow(CemeterySystem system) {
         if (registrationFrame == null) {
             registrationFrame = new JFrame("Register Client");
             registrationFrame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
             registrationFrame.setSize(760, 700);
             registrationFrame.setLocationRelativeTo(this);
-            registrationFrame.add(createClientPanel());
+            registrationFrame.add(createClientPanel(system));
         }
         registrationFrame.setVisible(true);
         registrationFrame.toFront();
@@ -529,11 +459,11 @@ public class Main extends JFrame {
         private final JButton button = new JButton("\uD83D\uDDD1");
         private int clientId;
 
-        DeleteButtonEditor() {
+        DeleteButtonEditor(CemeterySystem system) {
             button.setToolTipText("Soft delete this client");
             button.setFocusable(false);
             button.addActionListener(e -> {
-                softDeleteClient(clientId);
+                softDeleteClient(system, clientId);
                 fireEditingStopped();
             });
         }
@@ -552,7 +482,7 @@ public class Main extends JFrame {
         }
     }
 
-    private JPanel createClientPanel() {
+    private JPanel createClientPanel(CemeterySystem system) {
         JPanel panel = new JPanel(new GridBagLayout());
         panel.setBorder(BorderFactory.createTitledBorder("Register Client"));
 
@@ -576,12 +506,12 @@ public class Main extends JFrame {
         gbc.gridy = 11;
         gbc.gridwidth = 2;
         JButton registerButton = new JButton("Register Client");
-        registerButton.addActionListener(e -> registerClient());
+        registerButton.addActionListener(e -> registerClient(system));
         panel.add(registerButton, gbc);
         return panel;
     }
 
-    JPanel createReportPanel() {
+    JPanel createReportPanel(CemeterySystem system) {
         JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 10));
         panel.setBorder(BorderFactory.createTitledBorder("Reports"));
         JButton reportButton = new JButton("Print Reports");
@@ -600,9 +530,9 @@ public class Main extends JFrame {
         panel.add(field, gbc);
     }
 
-    private void registerClient() {
+    private void registerClient(CemeterySystem system) {
         try {
-            int clientId = system.getNextClientId();
+            int clientId = 0; // system.getNextClientId();
             String koreanName = koreanNameField.getText().trim();
             String englishSurname = englishSurnameField.getText().trim();
             String englishGiven = englishGivenNameField.getText().trim();
@@ -622,10 +552,10 @@ public class Main extends JFrame {
 
             Client client = system.addClient(clientId, koreanName, englishSurname, englishGiven, englishMiddle,
                     phone1, phone2, streetAddress, city, state, zipCode);
-            clientIdField.setText(String.valueOf(system.getNextClientId()));
-            refreshClientTable();
-            refreshPurchaseSelectors();
-            saveSystem();
+            // clientIdField.setText(String.valueOf(system.getNextClientId()));
+            refreshClientTable(system);
+            refreshPurchaseSelectors(system);
+            saveSystem(system);
             appendLog("Client registered successfully: " + client);
         } catch (Exception ex) {
             JOptionPane.showMessageDialog(this, ex.getMessage(), "Registration failed", JOptionPane.ERROR_MESSAGE);
@@ -633,9 +563,9 @@ public class Main extends JFrame {
         }
     }
 
-    private void refreshLotList() {
+    private void refreshLotList(CemeterySystem system) {
         lotTableModel.setRowCount(0);
-        for (CemeterySystem.CemeteryLot lot : system.getLots()) {
+        for (CemeterySystem.CemeteryLot lot : system.getLots().values()) {
             boolean sold = lot.isSold();
             lotTableModel.addRow(new Object[] {
                     lot.getLotNumber(), sold ? "Sold" : "Available", sold ? "" : formatMoney(lot.getPrice()),
@@ -644,9 +574,9 @@ public class Main extends JFrame {
         }
     }
 
-    private void refreshLotStatusTable() {
+    private void refreshLotStatusTable(CemeterySystem system) {
         lotStatusTableModel.setRowCount(0);
-        for (CemeterySystem.CemeteryLot lot : system.getLots()) {
+        for (CemeterySystem.CemeteryLot lot : system.getLots().values()) {
             Client client = lot.getClientId() == null ? null : system.getClient(lot.getClientId());
             double balance = lot.isSold() ? system.getLotBalance(lot.getLotNumber()) : 0.0;
             lotStatusTableModel.addRow(new Object[] {
@@ -736,7 +666,7 @@ public class Main extends JFrame {
         private final JTextField zipDetailField;
         private final JTextArea transactionArea;
 
-        ClientDetailFrame(Client client) {
+        ClientDetailFrame(CemeterySystem system, Client client) {
             this.client = client;
             koreanNameDetailField = new JTextField(client.getKoreanName(), 32);
             englishSurnameDetailField = new JTextField(client.getEnglishSurname(), 26);
@@ -779,7 +709,7 @@ public class Main extends JFrame {
             addDetailField(fields, constraints, 10, "ZIP Code:", zipDetailField);
 
             JButton saveButton = new JButton("Save Client Information");
-            saveButton.addActionListener(e -> saveDetails());
+            saveButton.addActionListener(e -> saveDetails(system));
             JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT));
             buttons.add(saveButton);
 
@@ -804,7 +734,7 @@ public class Main extends JFrame {
             panel.add(field, constraints);
         }
 
-        private void saveDetails() {
+        private void saveDetails(CemeterySystem system) {
             try {
                 String koreanName = koreanNameDetailField.getText().trim();
                 String englishSurname = englishSurnameDetailField.getText().trim();
@@ -827,8 +757,8 @@ public class Main extends JFrame {
                 client.updateDetails(koreanName, englishSurname, englishGiven,
                         englishMiddleDetailField.getText().trim(), phone1, phone2,
                         street, city, state, zipCode);
-                saveSystem();
-                refreshClientTable();
+                saveSystem(system);
+                refreshClientTable(system);
                 appendLog("Client information updated: " + client);
                 dispose();
             } catch (Exception ex) {
@@ -838,7 +768,7 @@ public class Main extends JFrame {
         }
     }
 
-    private void seedDemoData() {
+    private void seedDemoData(CemeterySystem system) {
         system.addLot("A-101", 2500.0, "North garden, section A");
         system.addLot("A-102", 2600.0, "Near the memorial walkway");
         system.addLot("A-103", 3100.0, "Quiet corner lot");
@@ -851,30 +781,107 @@ public class Main extends JFrame {
         system.purchaseLots(101, List.of("B-201"), 4800.0, LocalDate.of(2026, 8, 2));
     }
 
-    private static class CemeteryData implements Serializable {
+    public static class CemeteryData implements Serializable {
         private static final long serialVersionUID = 1L;
         private final Map<String, CemeterySystem.CemeteryLot> lots;
-        private final List<Purchase> purchases;
+        private final Collection<Purchase> purchases;
         private final List<Payment> payments;
 
-        CemeteryData(Map<String, CemeterySystem.CemeteryLot> lots, List<Purchase> purchases, List<Payment> payments) {
+        CemeteryData(Map<String, CemeterySystem.CemeteryLot> lots, Collection<Purchase> purchases,
+                Collection<Payment> payments) {
             this.lots = new LinkedHashMap<>(lots);
             this.purchases = new ArrayList<>(purchases);
             this.payments = new ArrayList<>(payments);
         }
+
+        public Map<String, CemeterySystem.CemeteryLot> getLots() {
+            return lots;
+        }
+
+        public Collection<Purchase> getPurchases() {
+            return purchases;
+        }
+
+        public Collection<Payment> getPayments() {
+            return payments;
+        }
     }
-   
+
     public static class ClientData implements Serializable {
         private static final long serialVersionUID = 1L;
         private final Map<Integer, Client> clients;
 
-        ClientData(Map<Integer, Client> clients) {
+        public ClientData(Map<Integer, Client> clients) {
             this.clients = new LinkedHashMap<>(clients);
         }
 
-        Map<Integer, Client> getClients() {
+        public Map<Integer, Client> getClients() {
             return clients;
         }
+
+    }
+
+    JPanel createLotPanel(CemeterySystem system) {
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setBorder(BorderFactory.createTitledBorder("Cemetery Lots"));
+        lotTable.setRowHeight(28);
+        lotTable.setAutoCreateRowSorter(true);
+        lotTable.getColumnModel().getColumn(0).setPreferredWidth(90);
+        lotTable.getColumnModel().getColumn(1).setPreferredWidth(110);
+        lotTable.getColumnModel().getColumn(2).setPreferredWidth(100);
+        lotTable.getColumnModel().getColumn(3).setPreferredWidth(320);
+        lotTable.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent event) {
+                if (event.getClickCount() == 1) {
+                    openLotInTransactionTab(system, lotTable, lotTableModel);
+                }
+            }
+        });
+        panel.add(new JScrollPane(lotTable), BorderLayout.CENTER);
+        return panel;
+    }
+
+    JPanel createLotStatusPanel(CemeterySystem system) {
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setBorder(BorderFactory.createTitledBorder("Lot Statuses"));
+        lotStatusTable.setAutoCreateRowSorter(true);
+        lotStatusTable.setRowHeight(28);
+        lotStatusTable.addMouseListener(new MouseAdapter() {
+            // @Override
+            public void mouseClicked(MouseEvent event) {
+                if (event.getClickCount() == 1) {
+                    openLotInTransactionTab(system, lotStatusTable, lotStatusTableModel);
+                }
+            }
+        });
+        panel.add(new JScrollPane(lotStatusTable), BorderLayout.CENTER);
+        return panel;
+    }
+
+    private void openLotInTransactionTab(CemeterySystem system, JTable sourceTable, DefaultTableModel sourceModel) {
+        int selectedRow = sourceTable.getSelectedRow();
+        if (selectedRow < 0 || transactionButton == null) {
+            return;
+        }
+        int modelRow = sourceTable.convertRowIndexToModel(selectedRow);
+        String lotNumber = sourceModel.getValueAt(modelRow, 0).toString();
+        CemeterySystem.CemeteryLot lot = system.getLot(lotNumber);
+        if (lot == null) {
+            return;
+        }
+        boolean purchaseMode = !lot.isSold();
+        if (purchaseMode) {
+            transactionClientIdField.setText("");
+            purchaseModeButton.setSelected(true);
+        } else {
+            transactionClientIdField.setText(String.valueOf(lot.getClientId()));
+            cancelModeButton.setSelected(true);
+        }
+        updateTransactionButton(system, transactionButton, purchaseMode);
+        purchaseLotCombo.setSelectedItem(lotNumber);
+        updateTransactionClientName(system);
+        tabs.setSelectedComponent(purchaseCancellationTab);
 
     }
 }

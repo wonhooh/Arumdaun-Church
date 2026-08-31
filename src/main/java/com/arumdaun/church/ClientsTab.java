@@ -3,8 +3,8 @@ package com.arumdaun.church;
 import javax.swing.JPanel;
 
 class ClientsTab extends JPanel {
-    ClientsTab(Main main) {
+    ClientsTab(CemeterySystem system, Main main) {
         super(new java.awt.BorderLayout());
-        add(main.createClientsPanel(), java.awt.BorderLayout.CENTER);
+        add(main.createClientsPanel(system), java.awt.BorderLayout.CENTER);
     }
 }

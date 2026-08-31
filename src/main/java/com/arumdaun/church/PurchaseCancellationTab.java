@@ -3,8 +3,8 @@ package com.arumdaun.church;
 import javax.swing.JPanel;
 
 class PurchaseCancellationTab extends JPanel {
-    PurchaseCancellationTab(Main main) {
+    PurchaseCancellationTab(CemeterySystem system, Main main) {
         super(new java.awt.BorderLayout());
-        add(main.createPurchaseCancellationPanel(), java.awt.BorderLayout.CENTER);
+        add(main.createPurchaseCancellationPanel(system), java.awt.BorderLayout.CENTER);
     }
 }

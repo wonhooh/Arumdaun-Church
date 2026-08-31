@@ -29,7 +29,8 @@ public class Purchase implements Serializable {
         this.purchaseDate = purchaseDate;
     }
 
-    public Purchase(int clientId, List<CemeteryLot> lots, LocalDate purchaseDate, String purchaseId, double totalPrice) {
+    public Purchase(int clientId, List<CemeterySystem.CemeteryLot> lots, LocalDate purchaseDate, String purchaseId,
+            double totalPrice) {
         this.clientId = clientId;
         this.lots = lots;
         this.purchaseDate = purchaseDate;
@@ -45,7 +46,7 @@ public class Purchase implements Serializable {
         return clientId;
     }
 
-    public List<CemeteryLot> getLots() {
+    public List<CemeterySystem.CemeteryLot> getLots() {
         return lots;
     }
 

@@ -3,8 +3,10 @@ package com.arumdaun.church;
 import javax.swing.JPanel;
 
 class LotStatusTab extends JPanel {
-    LotStatusTab(Main main) {
+
+    public LotStatusTab(CemeterySystem system, Main main) {
         super(new java.awt.BorderLayout());
-        add(main.createLotStatusPanel(), java.awt.BorderLayout.CENTER);
+        add(main.createLotStatusPanel(system), java.awt.BorderLayout.CENTER);
     }
+
 }

@@ -3,23 +3,70 @@ package com.arumdaun.church;
 import java.io.Serializable;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.UUID;
 
 public class CemeterySystem implements Serializable {
+
     private static final long serialVersionUID = 1L;
-    private final Map<String, CemeteryLot> lots = new LinkedHashMap<>();
-    private final Map<Integer, Client> clients = new LinkedHashMap<>();
-    private final List<Purchase> purchases = new ArrayList<>();
-    private final List<Payment> payments = new ArrayList<>();
+    private Map<String, CemeteryLot> lots = new TreeMap<>();
+    private Map<Integer, Client> clients = new TreeMap<>();
+    private Collection<Purchase> purchases = new ArrayList<>();
+    private Collection<Payment> payments = new ArrayList<>();
     private int nextClientId = 102;
 
     public boolean isEmpty() {
-        return clients.isEmpty() && lots.isEmpty() && purchases.isEmpty() && payments.isEmpty();
+        return clients.isEmpty() || lots.isEmpty();
+    }
+
+    public Collection<Purchase> getPurchases() {
+        return purchases;
+    }
+
+    public void setPurchases(Collection<Purchase> purchases) {
+        this.purchases = purchases;
+    }
+
+    public Collection<Payment> getPayments() {
+        return payments;
+    }
+
+    public void setPayments(Collection<Payment> payments) {
+        this.payments = payments;
+    }
+
+    public Map<String, CemeteryLot> getLots() {
+        return lots;
+    }
+
+    public void setLots(Map<String, CemeteryLot> lots) {
+        this.lots = lots;
+    }
+
+    public Client getClient(int clientId) {
+        return clients.get(clientId);
+    }
+
+    public Map<Integer, Client> getClients() {
+        return clients;
+    }
+
+    public List<Client> getClients(boolean includeDeleted) {
+        List<Client> result = new ArrayList<>(clients.values());
+        if (!includeDeleted) {
+            result.removeIf(Client::isDeleted);
+        }
+        result.sort(Comparator.comparing(Client::getEnglishFullName, String.CASE_INSENSITIVE_ORDER));
+        return result;
+    }
+
+    public void setClients(Map<Integer, Client> clients) {
+        this.clients = clients;
     }
 
     public void reconcileLotOwnership() {
@@ -40,37 +87,12 @@ public class CemeterySystem implements Serializable {
         }
     }
 
-    public int getNextClientId() {
-        return nextClientId;
-    }
-
-    public Client getClient(int clientId) {
-        return clients.get(clientId);
-    }
-
-    public List<Client> getClients() {
-        return getClients(false);
-    }
-
-    public List<Client> getClients(boolean includeDeleted) {
-        List<Client> result = new ArrayList<>(clients.values());
-        if (!includeDeleted) {
-            result.removeIf(Client::isDeleted);
-        }
-        result.sort(Comparator.comparing(Client::getEnglishFullName, String.CASE_INSENSITIVE_ORDER));
-        return result;
-    }
-
     public void softDeleteClient(int clientId) {
         Client client = clients.get(clientId);
         if (client == null) {
             throw new IllegalArgumentException("Client not found: " + clientId);
         }
         client.softDelete();
-    }
-
-    public List<Payment> getPayments() {
-        return new ArrayList<>(payments);
     }
 
     public List<Purchase> getActivePurchasesForClient(int clientId) {
@@ -153,12 +175,6 @@ public class CemeterySystem implements Serializable {
         }
         available.sort(Comparator.comparing(CemeteryLot::getLotNumber));
         return available;
-    }
-
-    public List<CemeteryLot> getLots() {
-        List<CemeteryLot> result = new ArrayList<>(lots.values());
-        result.sort(Comparator.comparing(CemeteryLot::getLotNumber));
-        return result;
     }
 
     public CemeteryLot getLot(String lotNumber) {
