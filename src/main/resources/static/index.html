@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Arumdaun Church Cemetery</title>
+    <style>
+        :root { font-family: system-ui, sans-serif; color: #17202a; background: #f3f6f8; }
+        body { margin: 0; }
+        main { max-width: 900px; margin: 0 auto; padding: 48px 24px; }
+        h1 { margin-bottom: 8px; }
+        .status { color: #176b45; font-weight: 700; }
+        table { width: 100%; border-collapse: collapse; background: white; margin-top: 24px; }
+        th, td { padding: 12px 14px; border-bottom: 1px solid #d9e1e6; text-align: left; }
+        th { background: #e8eef2; }
+    </style>
+</head>
+<body>
+<main>
+    <h1>Arumdaun Church Cemetery</h1>
+    <p class="status" id="status">Connecting to Spring Boot...</p>
+    <h2>Available lots</h2>
+    <table>
+        <thead><tr><th>Lot</th><th>Price</th><th>Status</th><th>Information</th></tr></thead>
+        <tbody id="lots"></tbody>
+    </table>
+</main>
+<script>
+    const money = value => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
+    Promise.all([fetch('/api/health'), fetch('/api/lots')])
+        .then(async ([healthResponse, lotsResponse]) => {
+            if (!healthResponse.ok || !lotsResponse.ok) throw new Error('Request failed');
+            const health = await healthResponse.json();
+            const lots = await lotsResponse.json();
+            document.querySelector('#status').textContent = `Spring Boot status: ${health.status}`;
+            document.querySelector('#lots').innerHTML = lots.map(lot =>
+                `<tr><td>${lot.lotNumber}</td><td>${money(lot.price)}</td><td>${lot.sold ? 'Sold' : 'Available'}</td><td>${lot.information}</td></tr>`
+            ).join('');
+        })
+        .catch(() => { document.querySelector('#status').textContent = 'Unable to connect to Spring Boot'; });
+</script>
+</body>
+</html>
