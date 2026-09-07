@@ -12,6 +12,10 @@ This log is the living record of the project. Any new feature, fix, requirement 
 
 A Swing desktop user interface was added in place of the earlier simple text menu. The application now runs as a graphical Java window for easier use on both Windows and macOS.
 
+The Spring web landing page now includes a client table with client ID, Korean name, English name,
+and View / edit actions, plus an Add new client action. Admin users can manage client records from
+`/admin.html`; the page uses HTTP Basic authentication and persists create/update changes to PostgreSQL.
+
 ## Final Requirement Alignment
 
 The current version reflects the most recent business rules:

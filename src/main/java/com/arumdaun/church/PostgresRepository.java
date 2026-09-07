@@ -23,6 +23,34 @@ public class PostgresRepository {
         return true;
     }
 
+    public Client createClient(CemeteryController.ClientRequest request) {
+        Integer clientId = jdbcTemplate.queryForObject(
+                "SELECT COALESCE(MAX(client_id), 99) + 1 FROM clients", Integer.class);
+        jdbcTemplate.update("""
+                INSERT INTO clients (client_id, korean_name, english_surname, english_given_name,
+                    english_middle_name, phone1, phone2, street_address, city, state, zip_code)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, clientId, request.koreanName(), request.englishSurname(), request.englishGivenName(),
+                request.englishMiddleName(), request.phone1(), request.phone2(), request.streetAddress(),
+                request.city(), request.state(), request.zipCode());
+        return loadSystem().getClients().get(clientId);
+    }
+
+    public Client updateClient(int clientId, CemeteryController.ClientRequest request) {
+        int updated = jdbcTemplate.update("""
+                UPDATE clients SET korean_name = ?, english_surname = ?, english_given_name = ?,
+                    english_middle_name = ?, phone1 = ?, phone2 = ?, street_address = ?, city = ?,
+                    state = ?, zip_code = ?
+                WHERE client_id = ? AND deleted = FALSE
+                """, request.koreanName(), request.englishSurname(), request.englishGivenName(),
+                request.englishMiddleName(), request.phone1(), request.phone2(), request.streetAddress(),
+                request.city(), request.state(), request.zipCode(), clientId);
+        if (updated == 0) {
+            throw new IllegalArgumentException("Client not found: " + clientId);
+        }
+        return loadSystem().getClients().get(clientId);
+    }
+
     public CemeterySystem loadSystem() {
         CemeterySystem system = new CemeterySystem();
         Map<Integer, Client> clients = new LinkedHashMap<>();

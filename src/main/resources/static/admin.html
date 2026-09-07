@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Admin | Arumdaun Church Cemetery</title>
+    <style>
+        :root { font-family: system-ui, sans-serif; color: #17202a; background: #f3f6f8; }
+        body { margin: 0; } main { max-width: 1100px; margin: 0 auto; padding: 48px 24px; }
+        .toolbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+        .table-scroll { max-height: 320px; overflow-y: auto; background: white; margin: 16px 0 32px; }
+        table { width: 100%; border-collapse: collapse; } th, td { padding: 12px 14px; border-bottom: 1px solid #d9e1e6; text-align: left; }
+        th { position: sticky; top: 0; background: #e8eef2; z-index: 1; }
+        .sort-button { padding: 0; border: 0; background: transparent; color: inherit; font: inherit; font-weight: 700; cursor: pointer; }
+        .add-client { margin-bottom: 24px; }
+        form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; background: white; padding: 24px; }
+        label { display: grid; gap: 6px; font-weight: 700; } input { padding: 10px; border: 1px solid #b9c5cc; border-radius: 4px; font: inherit; }
+        .wide { grid-column: 1 / -1; } .actions { display: flex; gap: 12px; align-items: center; }
+        button, a { padding: 10px 16px; border: 0; border-radius: 6px; background: #176b45; color: white; text-decoration: none; font: inherit; cursor: pointer; }
+        #message { font-weight: 700; } @media (max-width: 650px) { form { grid-template-columns: 1fr; } .wide { grid-column: auto; } }
+    </style>
+</head>
+<body><main>
+    <p><a href="/">Back to landing page</a></p>
+    <div class="toolbar"><h1>Clients</h1></div>
+    <div class="table-scroll">
+        <table>
+            <thead><tr><th>Client ID</th><th><button class="sort-button" type="button" data-sort="koreanName">Korean name</button></th><th><button class="sort-button" type="button" data-sort="englishName">English name</button></th><th>Action</th></tr></thead>
+            <tbody id="clients"></tbody>
+        </table>
+    </div>
+    <button class="add-client" id="add-client" type="button">Add new client</button>
+    <section id="client-form-pane" hidden>
+        <h2 id="heading">Add client</h2>
+        <p id="message"></p>
+        <form id="client-form">
+            <label>Korean name <input name="koreanName" required></label>
+            <label>English surname <input name="englishSurname" required></label>
+            <label>English given name <input name="englishGivenName" required></label>
+            <label>English middle name <input name="englishMiddleName"></label>
+            <label>Phone 1 <input name="phone1" required></label>
+            <label>Phone 2 <input name="phone2"></label>
+            <label class="wide">Street address <input name="streetAddress"></label>
+            <label>City <input name="city"></label><label>State <input name="state"></label><label>ZIP code <input name="zipCode"></label>
+            <div class="wide actions"><button type="submit">Save client</button><button id="cancel-client" type="button">Cancel</button><span id="client-id"></span></div>
+        </form>
+    </section>
+</main><script>
+    const form = document.querySelector('#client-form');
+    const formPane = document.querySelector('#client-form-pane');
+    const addClientButton = document.querySelector('#add-client');
+    const cancelClientButton = document.querySelector('#cancel-client');
+    let editingClientId = new URLSearchParams(location.search).get('clientId');
+    const fields = ['koreanName', 'englishSurname', 'englishGivenName', 'englishMiddleName', 'phone1', 'phone2', 'streetAddress', 'city', 'state', 'zipCode'];
+    const message = text => document.querySelector('#message').textContent = text;
+    const loadClients = () => fetch('/api/admin/clients')
+        .then(response => response.ok ? response.json() : Promise.reject())
+        .then(data => { clients = data; renderClients(); });
+    let clients = [];
+    let sortField = null;
+    let sortAscending = true;
+    const englishName = client => `${client.englishSurname}, ${client.englishGivenName}${client.englishMiddleName ? ` ${client.englishMiddleName}` : ''}`;
+    const escapeHtml = value => String(value ?? '').replace(/[&<>'\"]/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '\"': '&quot;' }[character]));
+    const renderClients = () => {
+        const sortedClients = [...clients].sort((first, second) => {
+            if (!sortField) return first.clientId - second.clientId;
+            const firstValue = sortField === 'englishName' ? englishName(first) : first[sortField];
+            const secondValue = sortField === 'englishName' ? englishName(second) : second[sortField];
+            return String(firstValue ?? '').localeCompare(String(secondValue ?? ''), undefined, { sensitivity: 'base' }) * (sortAscending ? 1 : -1);
+        });
+        document.querySelector('#clients').innerHTML = sortedClients.map(client =>
+            `<tr><td>${client.clientId}</td><td>${escapeHtml(client.koreanName)}</td><td>${escapeHtml(englishName(client))}</td><td><a href="/admin.html?clientId=${client.clientId}">View / Edit</a></td></tr>`
+        ).join('');
+    };
+    document.querySelectorAll('[data-sort]').forEach(button => button.addEventListener('click', () => {
+        const nextField = button.dataset.sort;
+        sortAscending = sortField === nextField ? !sortAscending : true;
+        sortField = nextField;
+        document.querySelectorAll('[data-sort]').forEach(item => { item.textContent = item.dataset.sort === sortField ? `${item.textContent.replace(/ [▲▼]$/, '')} ${sortAscending ? '▲' : '▼'}` : item.textContent.replace(/ [▲▼]$/, ''); });
+        renderClients();
+    }));
+    loadClients().catch(() => message('Unable to load clients.'));
+    addClientButton.addEventListener('click', () => {
+        editingClientId = null;
+        form.reset();
+        document.querySelector('#heading').textContent = 'Add client';
+        document.querySelector('#client-id').textContent = '';
+        message('');
+        formPane.hidden = false;
+        form.elements.koreanName.focus();
+    });
+    cancelClientButton.addEventListener('click', () => {
+        form.reset();
+        formPane.hidden = true;
+        message('');
+    });
+    if (editingClientId) {
+        formPane.hidden = false;
+        document.querySelector('#heading').textContent = `Edit client ${editingClientId}`;
+        fetch('/api/admin/clients').then(response => response.ok ? response.json() : Promise.reject()).then(clients => {
+            const client = clients.find(item => String(item.clientId) === editingClientId);
+            if (!client) throw new Error();
+            fields.forEach(field => form.elements[field].value = client[field] ?? '');
+            document.querySelector('#client-id').textContent = `Client ID: ${editingClientId}`;
+        }).catch(() => message('Unable to load client.'));
+    }
+    form.addEventListener('submit', event => {
+        event.preventDefault();
+        const data = Object.fromEntries(fields.map(field => [field, form.elements[field].value.trim()]));
+        const method = editingClientId ? 'PUT' : 'POST';
+        const url = editingClientId ? `/api/admin/clients/${editingClientId}` : '/api/admin/clients';
+        fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
+            .then(response => response.ok ? response.json() : response.json().then(error => Promise.reject(error)))
+            .then(client => {
+                message(`Client ${client.clientId} saved.`);
+                document.querySelector('#client-id').textContent = `Client ID: ${client.clientId}`;
+                return loadClients();
+            })
+            .then(() => { formPane.hidden = true; })
+            .catch(error => message(error.message || 'Unable to save client.'));
+    });
+</script></body></html>

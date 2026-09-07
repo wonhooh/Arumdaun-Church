@@ -30,7 +30,14 @@ The web application uses PostgreSQL. By default it connects to the `cemetery` da
 export CEMETERY_DB_URL=jdbc:postgresql://localhost:5432/cemetery
 export CEMETERY_DB_USER=wonhooh
 export CEMETERY_DB_PASSWORD=your-password
+export CEMETERY_ADMIN_USERNAME=admin
+export CEMETERY_ADMIN_PASSWORD=your-password
 ```
 
 The database schema is initialized from `src/main/resources/schema.sql` when the application starts.
 The application reads clients, cemetery lots, purchases, and payments from PostgreSQL.
+
+The landing page displays available lots without prices and labels reserved lots as `Reserved`.
+Use the `View clients` button to open the admin client page. The client table and its create/update
+APIs require HTTP Basic authentication with the admin credentials above. The default username is
+`admin` and the default password is `change-me`; set both environment variables before deployment.
