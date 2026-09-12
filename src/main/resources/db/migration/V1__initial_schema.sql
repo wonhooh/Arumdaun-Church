@@ -1,6 +1,5 @@
 CREATE TABLE IF NOT EXISTS clients (
     client_id INTEGER PRIMARY KEY,
-    member_id INTEGER,
     korean_name VARCHAR(200) NOT NULL,
     english_surname VARCHAR(200) NOT NULL,
     english_given_name VARCHAR(200) NOT NULL,

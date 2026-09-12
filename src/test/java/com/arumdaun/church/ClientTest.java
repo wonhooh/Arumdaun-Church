@@ -56,7 +56,7 @@ class ClientTest {
     void toStringIncludesClientAndPhoneDetails() {
         Client client = newClient();
 
-        assertEquals("Client Id: 7 | Client Name: 김민수 / Kim, Minsoo | Phones: 010-1234, ",
+        assertEquals("Client Id: 7 | Member Id: null | Client Name: 김민수 / Kim, Minsoo | Phones: 010-1234, ",
                 client.toString());
         assertEquals(null, client.getDeletedDate());
     }

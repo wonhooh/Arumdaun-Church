@@ -16,6 +16,15 @@ The Spring web landing page now includes a client table with client ID, Korean n
 and View / edit actions, plus an Add new client action. Admin users can manage client records from
 `/admin.html`; the page uses HTTP Basic authentication and persists create/update changes to PostgreSQL.
 
+Database schema evolution now uses Flyway migrations under `src/main/resources/db/migration`.
+Existing non-empty databases are baselined at version 1 without dropping data, while new databases
+run `V1__initial_schema.sql`. Future tables, columns, column type changes, and removals must be
+introduced through new numbered migrations and tested against a production database backup.
+
+Client `member_id` is now nullable and is loaded from PostgreSQL, accepted by client create/update
+APIs, returned in API responses, shown in the admin client table and form, and included in client
+diagnostic text. Null member IDs are displayed explicitly as `null` in the client table.
+
 ## Final Requirement Alignment
 
 The current version reflects the most recent business rules:

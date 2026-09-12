@@ -1,6 +1,7 @@
 package com.arumdaun.church;
 
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 import org.springframework.http.HttpStatus;
@@ -42,10 +43,14 @@ public class CemeteryController {
     public List<Map<String, Object>> clients() {
         CemeterySystem system = repository.loadSystem();
         return system.getClients(false).stream()
-                .map(client -> Map.<String, Object>of(
-                        "clientId", client.getClientId(),
-                        "koreanName", client.getKoreanName(),
-                        "englishName", client.getEnglishFullName()))
+                .map(client -> {
+                    Map<String, Object> result = new LinkedHashMap<>();
+                    result.put("clientId", client.getClientId());
+                    result.put("memberId", client.getMemberId());
+                    result.put("koreanName", client.getKoreanName());
+                    result.put("englishName", client.getEnglishFullName());
+                    return result;
+                })
                 .toList();
     }
 
@@ -78,6 +83,7 @@ public class CemeteryController {
 
     public record ClientRequest(
             Integer clientId,
+            Integer memberId,
             String koreanName,
             String englishSurname,
             String englishGivenName,
@@ -89,7 +95,8 @@ public class CemeteryController {
             String state,
             String zipCode) {
         static ClientRequest from(Client client) {
-            return new ClientRequest(client.getClientId(), client.getKoreanName(), client.getEnglishSurname(),
+            return new ClientRequest(client.getClientId(), client.getMemberId(), client.getKoreanName(),
+                    client.getEnglishSurname(),
                     client.getEnglishGivenName(), client.getEnglishMiddleName(), client.getPhone1(),
                     client.getPhone2(), client.getStreetAddress(), client.getCity(), client.getState(),
                     client.getZipCode());

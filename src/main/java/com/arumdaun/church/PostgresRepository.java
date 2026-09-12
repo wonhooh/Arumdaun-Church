@@ -27,22 +27,22 @@ public class PostgresRepository {
         Integer clientId = jdbcTemplate.queryForObject(
                 "SELECT COALESCE(MAX(client_id), 99) + 1 FROM clients", Integer.class);
         jdbcTemplate.update("""
-                INSERT INTO clients (client_id, korean_name, english_surname, english_given_name,
+                INSERT INTO clients (client_id, member_id, korean_name, english_surname, english_given_name,
                     english_middle_name, phone1, phone2, street_address, city, state, zip_code)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, clientId, request.koreanName(), request.englishSurname(), request.englishGivenName(),
-                request.englishMiddleName(), request.phone1(), request.phone2(), request.streetAddress(),
-                request.city(), request.state(), request.zipCode());
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, clientId, request.memberId(), request.koreanName(), request.englishSurname(),
+                request.englishGivenName(), request.englishMiddleName(), request.phone1(), request.phone2(),
+                request.streetAddress(), request.city(), request.state(), request.zipCode());
         return loadSystem().getClients().get(clientId);
     }
 
     public Client updateClient(int clientId, CemeteryController.ClientRequest request) {
         int updated = jdbcTemplate.update("""
-                UPDATE clients SET korean_name = ?, english_surname = ?, english_given_name = ?,
+                UPDATE clients SET member_id = ?, korean_name = ?, english_surname = ?, english_given_name = ?,
                     english_middle_name = ?, phone1 = ?, phone2 = ?, street_address = ?, city = ?,
                     state = ?, zip_code = ?
                 WHERE client_id = ? AND deleted = FALSE
-                """, request.koreanName(), request.englishSurname(), request.englishGivenName(),
+                """, request.memberId(), request.koreanName(), request.englishSurname(), request.englishGivenName(),
                 request.englishMiddleName(), request.phone1(), request.phone2(), request.streetAddress(),
                 request.city(), request.state(), request.zipCode(), clientId);
         if (updated == 0) {
@@ -57,7 +57,7 @@ public class PostgresRepository {
         Map<String, CemeterySystem.CemeteryLot> lots = new LinkedHashMap<>();
 
         jdbcTemplate.query("""
-                SELECT client_id, korean_name, english_surname, english_given_name,
+                SELECT client_id, member_id, korean_name, english_surname, english_given_name,
                        english_middle_name, phone1, phone2, street_address, city,
                        state, zip_code, deleted, deleted_date
                 FROM clients ORDER BY client_id
@@ -74,6 +74,7 @@ public class PostgresRepository {
                     rs.getString("city"),
                     rs.getString("state"),
                     rs.getString("zip_code"));
+            client.setMemberId((Integer) rs.getObject("member_id"));
             if (rs.getBoolean("deleted")) {
                 client.softDelete();
             }

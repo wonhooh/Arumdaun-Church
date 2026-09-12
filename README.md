@@ -34,8 +34,37 @@ export CEMETERY_ADMIN_USERNAME=admin
 export CEMETERY_ADMIN_PASSWORD=your-password
 ```
 
-The database schema is initialized from `src/main/resources/schema.sql` when the application starts.
+The database schema is managed by Flyway migrations in `src/main/resources/db/migration`.
 The application reads clients, cemetery lots, purchases, and payments from PostgreSQL.
+
+## Production Database Changes
+
+Do not edit an applied migration or use the old `schema.sql` file for production changes. Add a
+new migration with the next version number, for example `V2__add_client_email.sql`, then deploy
+the application. Flyway applies each new migration once and records it in `flyway_schema_history`.
+
+Examples:
+
+```sql
+-- V2__add_client_email.sql
+ALTER TABLE clients ADD COLUMN email VARCHAR(320);
+
+-- V3__create_notes.sql
+CREATE TABLE client_notes (
+	note_id BIGSERIAL PRIMARY KEY,
+	client_id INTEGER NOT NULL REFERENCES clients(client_id),
+	note_text TEXT NOT NULL,
+	created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- V4__change_phone_type.sql
+ALTER TABLE clients ALTER COLUMN phone1 TYPE VARCHAR(40);
+```
+
+For removing a column, first deploy code that no longer reads or writes it, then add a later
+migration with `ALTER TABLE ... DROP COLUMN`. Back up production before destructive changes and
+test every migration against a copy of the production database. Existing databases are baselined
+automatically at version 1; new databases run the initial `V1__initial_schema.sql` migration.
 
 The landing page displays available lots without prices and labels reserved lots as `Reserved`.
 Use the `View clients` button to open the admin client page. The client table and its create/update

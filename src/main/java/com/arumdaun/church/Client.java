@@ -8,6 +8,7 @@ import java.util.List;
 public class Client implements Serializable {
     private static final long serialVersionUID = 1L;
     private final int clientId;
+    private Integer memberId;
     private String koreanName;
     private String englishSurname;
     private String englishGivenName;
@@ -42,6 +43,14 @@ public class Client implements Serializable {
 
     public int getClientId() {
         return clientId;
+    }
+
+    public Integer getMemberId() {
+        return memberId;
+    }
+
+    public void setMemberId(Integer memberId) {
+        this.memberId = memberId;
     }
 
     public String getKoreanName() {
@@ -129,7 +138,7 @@ public class Client implements Serializable {
 
     @Override
     public String toString() {
-        return "Client Id: " + clientId + " | Client Name: " + getDisplayName() +
+        return "Client Id: " + clientId + " | Member Id: " + memberId + " | Client Name: " + getDisplayName() +
                 " | Phones: " + phone1 + ", " + (phone2 == null ? "" : phone2);
     }
 

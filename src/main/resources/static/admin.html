@@ -25,7 +25,7 @@
     <div class="toolbar"><h1>Clients</h1></div>
     <div class="table-scroll">
         <table>
-            <thead><tr><th>Client ID</th><th><button class="sort-button" type="button" data-sort="koreanName">Korean name</button></th><th><button class="sort-button" type="button" data-sort="englishName">English name</button></th><th>Action</th></tr></thead>
+            <thead><tr><th>Client ID</th><th>Member ID</th><th><button class="sort-button" type="button" data-sort="koreanName">Korean name</button></th><th><button class="sort-button" type="button" data-sort="englishName">English name</button></th><th>Action</th></tr></thead>
             <tbody id="clients"></tbody>
         </table>
     </div>
@@ -34,6 +34,7 @@
         <h2 id="heading">Add client</h2>
         <p id="message"></p>
         <form id="client-form">
+            <label>Member ID <input name="memberId" type="number"></label>
             <label>Korean name <input name="koreanName" required></label>
             <label>English surname <input name="englishSurname" required></label>
             <label>English given name <input name="englishGivenName" required></label>
@@ -51,7 +52,7 @@
     const addClientButton = document.querySelector('#add-client');
     const cancelClientButton = document.querySelector('#cancel-client');
     let editingClientId = new URLSearchParams(location.search).get('clientId');
-    const fields = ['koreanName', 'englishSurname', 'englishGivenName', 'englishMiddleName', 'phone1', 'phone2', 'streetAddress', 'city', 'state', 'zipCode'];
+    const fields = ['memberId', 'koreanName', 'englishSurname', 'englishGivenName', 'englishMiddleName', 'phone1', 'phone2', 'streetAddress', 'city', 'state', 'zipCode'];
     const message = text => document.querySelector('#message').textContent = text;
     const loadClients = () => fetch('/api/admin/clients')
         .then(response => response.ok ? response.json() : Promise.reject())
@@ -61,6 +62,7 @@
     let sortAscending = true;
     const englishName = client => `${client.englishSurname}, ${client.englishGivenName}${client.englishMiddleName ? ` ${client.englishMiddleName}` : ''}`;
     const escapeHtml = value => String(value ?? '').replace(/[&<>'\"]/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '\"': '&quot;' }[character]));
+    const displayValue = value => value === null || value === undefined ? 'null' : escapeHtml(value);
     const renderClients = () => {
         const sortedClients = [...clients].sort((first, second) => {
             if (!sortField) return first.clientId - second.clientId;
@@ -69,7 +71,7 @@
             return String(firstValue ?? '').localeCompare(String(secondValue ?? ''), undefined, { sensitivity: 'base' }) * (sortAscending ? 1 : -1);
         });
         document.querySelector('#clients').innerHTML = sortedClients.map(client =>
-            `<tr><td>${client.clientId}</td><td>${escapeHtml(client.koreanName)}</td><td>${escapeHtml(englishName(client))}</td><td><a href="/admin.html?clientId=${client.clientId}">View / Edit</a></td></tr>`
+            `<tr><td>${client.clientId}</td><td>${displayValue(client.memberId)}</td><td>${escapeHtml(client.koreanName)}</td><td>${escapeHtml(englishName(client))}</td><td><a href="/admin.html?clientId=${client.clientId}">View / Edit</a></td></tr>`
         ).join('');
     };
     document.querySelectorAll('[data-sort]').forEach(button => button.addEventListener('click', () => {
@@ -107,6 +109,7 @@
     form.addEventListener('submit', event => {
         event.preventDefault();
         const data = Object.fromEntries(fields.map(field => [field, form.elements[field].value.trim()]));
+        data.memberId = data.memberId === '' ? null : Number(data.memberId);
         const method = editingClientId ? 'PUT' : 'POST';
         const url = editingClientId ? `/api/admin/clients/${editingClientId}` : '/api/admin/clients';
         fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })

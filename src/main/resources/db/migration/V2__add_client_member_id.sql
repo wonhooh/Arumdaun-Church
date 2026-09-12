@@ -1,0 +1,1 @@
+ALTER TABLE clients ADD COLUMN member_id INTEGER;
