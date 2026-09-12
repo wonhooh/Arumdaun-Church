@@ -1,35 +1,36 @@
 CREATE TABLE IF NOT EXISTS clients (
-    client_id INTEGER PRIMARY KEY,
-    member_id INTEGER,
-    korean_name VARCHAR(200) NOT NULL,
-    english_surname VARCHAR(200) NOT NULL,
-    english_given_name VARCHAR(200) NOT NULL,
-    english_middle_name VARCHAR(200),
-    phone1 VARCHAR(80),
-    phone2 VARCHAR(80),
-    street_address VARCHAR(300) NOT NULL DEFAULT '',
-    city VARCHAR(120) NOT NULL DEFAULT '',
-    state VARCHAR(80) NOT NULL DEFAULT '',
-    zip_code VARCHAR(40) NOT NULL DEFAULT '',
-    deleted BOOLEAN NOT NULL DEFAULT FALSE,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    member_id VARCHAR(64) NOT NULL DEFAULT '',
+    korean_name VARCHAR(64) NOT NULL,
+    surname VARCHAR(64)NOT NULL DEFAULT '',
+    given_name VARCHAR(64) NOT NULL DEFAULT '',
+    middle_name VARCHAR(64) NOT NULL DEFAULT '',
+    phone1 VARCHAR(64) NOT NULL DEFAULT '',
+    phone2 VARCHAR(64) NOT NULL DEFAULT '',
+    street_1 VARCHAR(256) NOT NULL DEFAULT '',
+    street_2 VARCHAR(256) NOT NULL DEFAULT '',
+    city VARCHAR(64) NOT NULL DEFAULT '',
+    state VARCHAR(64) NOT NULL DEFAULT '',
+    zip_code VARCHAR(64) NOT NULL DEFAULT '',
     deleted_date DATE
 );
 
 CREATE TABLE IF NOT EXISTS lots (
-    lot_number TEXT PRIMARY KEY,
-    price NUMERIC(12, 2) NOT NULL,
-    information TEXT NOT NULL DEFAULT '',
-    sold BOOLEAN NOT NULL DEFAULT FALSE,
-    client_id INTEGER REFERENCES clients(client_id)
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    client_id UUID REFERENCES clients(id),
+    lot_number TEXT NOT NULL UNIQUE,
+    price INTEGER NOT NULL,
+    information TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS transactions (
-    transaction_id UUID PRIMARY KEY,
-    client_id INTEGER NOT NULL REFERENCES clients(client_id),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    client_id UUID REFERENCES clients(id),
+    lot_id UUID REFERENCES lots(id),
     transaction_type TEXT NOT NULL,
     lot_numbers TEXT[] NOT NULL DEFAULT '{}',
-    total_price NUMERIC(12, 2) NOT NULL DEFAULT 0,
-    amount_paid NUMERIC(12, 2) NOT NULL DEFAULT 0,
+    total_price INTEGER NOT NULL DEFAULT 0,
+    amount_paid INTEGER NOT NULL DEFAULT 0,
     amount NUMERIC(12, 2) NOT NULL DEFAULT 0,
     refund_amount NUMERIC(12, 2) NOT NULL DEFAULT 0,
     method TEXT,
@@ -40,3 +41,4 @@ CREATE TABLE IF NOT EXISTS transactions (
 );
 
 CREATE INDEX IF NOT EXISTS idx_transactions_client_id ON transactions(client_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_lot_id    ON transactions(lot_id);
