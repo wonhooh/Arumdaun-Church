@@ -1,15 +1,16 @@
 package com.arumdaun.church;
 
-import java.util.List;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -45,7 +46,7 @@ public class CemeteryController {
         return system.getClients(false).stream()
                 .map(client -> {
                     Map<String, Object> result = new LinkedHashMap<>();
-                    result.put("clientId", client.getClientId());
+                    result.put("clientId", client.getId());
                     result.put("memberId", client.getMemberId());
                     result.put("koreanName", client.getKoreanName());
                     result.put("englishName", client.getEnglishFullName());
@@ -66,7 +67,7 @@ public class CemeteryController {
     }
 
     @PutMapping("/api/admin/clients/{clientId}")
-    public ClientRequest updateClient(@PathVariable int clientId, @RequestBody ClientRequest request) {
+    public ClientRequest updateClient(@PathVariable UUID clientId, @RequestBody ClientRequest request) {
         validate(request);
         return ClientRequest.from(repository.updateClient(clientId, request));
     }
@@ -82,7 +83,7 @@ public class CemeteryController {
     }
 
     public record ClientRequest(
-            Integer clientId,
+            UUID id,
             Integer memberId,
             String koreanName,
             String englishSurname,
@@ -95,7 +96,7 @@ public class CemeteryController {
             String state,
             String zipCode) {
         static ClientRequest from(Client client) {
-            return new ClientRequest(client.getClientId(), client.getMemberId(), client.getKoreanName(),
+            return new ClientRequest(client.getId(), client.getMemberId(), client.getKoreanName(),
                     client.getEnglishSurname(),
                     client.getEnglishGivenName(), client.getEnglishMiddleName(), client.getPhone1(),
                     client.getPhone2(), client.getStreetAddress(), client.getCity(), client.getState(),

@@ -24,19 +24,18 @@ public class PostgresRepository {
     }
 
     public Client createClient(CemeteryController.ClientRequest request) {
-        Integer clientId = jdbcTemplate.queryForObject(
-                "SELECT COALESCE(MAX(client_id), 99) + 1 FROM clients", Integer.class);
+        UUID id = UUID.randomUUID();
         jdbcTemplate.update("""
                 INSERT INTO clients (client_id, member_id, korean_name, english_surname, english_given_name,
                     english_middle_name, phone1, phone2, street_address, city, state, zip_code)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, clientId, request.memberId(), request.koreanName(), request.englishSurname(),
+                """, id, request.memberId(), request.koreanName(), request.englishSurname(),
                 request.englishGivenName(), request.englishMiddleName(), request.phone1(), request.phone2(),
                 request.streetAddress(), request.city(), request.state(), request.zipCode());
-        return loadSystem().getClients().get(clientId);
+        return loadSystem().getClients().get(id);
     }
 
-    public Client updateClient(int clientId, CemeteryController.ClientRequest request) {
+    public Client updateClient(UUID clientId, CemeteryController.ClientRequest request) {
         int updated = jdbcTemplate.update("""
                 UPDATE clients SET member_id = ?, korean_name = ?, english_surname = ?, english_given_name = ?,
                     english_middle_name = ?, phone1 = ?, phone2 = ?, street_address = ?, city = ?,
@@ -53,17 +52,18 @@ public class PostgresRepository {
 
     public CemeterySystem loadSystem() {
         CemeterySystem system = new CemeterySystem();
-        Map<Integer, Client> clients = new LinkedHashMap<>();
+        Map<UUID, Client> clients = new LinkedHashMap<>();
         Map<String, CemeterySystem.CemeteryLot> lots = new LinkedHashMap<>();
 
         jdbcTemplate.query("""
-                SELECT client_id, member_id, korean_name, english_surname, english_given_name,
+                SELECT id, member_id, korean_name, english_surname, english_given_name,
                        english_middle_name, phone1, phone2, street_address, city,
                        state, zip_code, deleted, deleted_date
-                FROM clients ORDER BY client_id
+                FROM clients ORDER BY korean_name
                 """, rs -> {
+            UUID id = UUID.fromString(rs.getString("id"));
             Client client = new Client(
-                    rs.getInt("client_id"),
+                    id,
                     rs.getString("korean_name"),
                     rs.getString("english_surname"),
                     rs.getString("english_given_name"),
@@ -78,7 +78,7 @@ public class PostgresRepository {
             if (rs.getBoolean("deleted")) {
                 client.softDelete();
             }
-            clients.put(client.getClientId(), client);
+            clients.put(client.getId(), client);
         });
 
         jdbcTemplate.query("""

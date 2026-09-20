@@ -2,12 +2,11 @@ package com.arumdaun.church;
 
 import java.io.Serializable;
 import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.UUID;
 
 public class Client implements Serializable {
     private static final long serialVersionUID = 1L;
-    private final int clientId;
+    private UUID id;
     private Integer memberId;
     private String koreanName;
     private String englishSurname;
@@ -21,12 +20,11 @@ public class Client implements Serializable {
     private String zipCode;
     private boolean deleted;
     private LocalDate deletedDate;
-    private final List<Purchase> purchases = new ArrayList<>();
 
-    public Client(int clientId, String koreanName, String englishSurname, String englishGivenName,
+    public Client(UUID id, String koreanName, String englishSurname, String englishGivenName,
             String englishMiddleName, String phone1, String phone2, String streetAddress, String city,
             String state, String zipCode) {
-        this.clientId = clientId;
+        this.id = id;
         this.koreanName = koreanName;
         this.englishSurname = englishSurname;
         this.englishGivenName = englishGivenName;
@@ -41,8 +39,8 @@ public class Client implements Serializable {
         this.deletedDate = null;
     }
 
-    public int getClientId() {
-        return clientId;
+    public UUID getId() {
+        return id;
     }
 
     public Integer getMemberId() {
@@ -132,13 +130,9 @@ public class Client implements Serializable {
         this.zipCode = zipCode;
     }
 
-    public void addPurchase(Purchase purchase) {
-        purchases.add(purchase);
-    }
-
     @Override
     public String toString() {
-        return "Client Id: " + clientId + " | Member Id: " + memberId + " | Client Name: " + getDisplayName() +
+        return "Id: " + id + " | Member Id: " + memberId + " | Client Name: " + getDisplayName() +
                 " | Phones: " + phone1 + ", " + (phone2 == null ? "" : phone2);
     }
 

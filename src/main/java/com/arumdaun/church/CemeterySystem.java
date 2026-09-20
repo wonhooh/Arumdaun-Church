@@ -15,7 +15,7 @@ public class CemeterySystem implements Serializable {
 
     private static final long serialVersionUID = 1L;
     private Map<String, CemeteryLot> lots = new TreeMap<>();
-    private Map<Integer, Client> clients = new TreeMap<>();
+    private Map<UUID, Client> clients = new TreeMap<>();
     private Collection<Purchase> purchases = new ArrayList<>();
     private Collection<Payment> payments = new ArrayList<>();
     private int nextClientId = 102;
@@ -140,15 +140,12 @@ public class CemeterySystem implements Serializable {
         return 0.0;
     }
 
-    public Client addClient(int clientId, String koreanName, String englishSurname, String englishGiven,
+    public Client addClient(UUID id, String koreanName, String englishSurname, String englishGiven,
             String englishMiddle, String phone1, String phone2, String streetAddress, String city,
             String state, String zipCode) {
-        Client client = new Client(clientId, koreanName, englishSurname, englishGiven, englishMiddle, phone1,
+        Client client = new Client(id, koreanName, englishSurname, englishGiven, englishMiddle, phone1,
                 phone2, streetAddress, city, state, zipCode);
-        clients.put(clientId, client);
-        if (clientId >= nextClientId) {
-            nextClientId = clientId + 1;
-        }
+        clients.put(id, client);
         return client;
     }
 
