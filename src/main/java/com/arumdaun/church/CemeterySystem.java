@@ -48,11 +48,11 @@ public class CemeterySystem implements Serializable {
         this.lots = lots;
     }
 
-    public Client getClient(int clientId) {
+    public Client getClient(UUID clientId) {
         return clients.get(clientId);
     }
 
-    public Map<Integer, Client> getClients() {
+    public Map<UUID, Client> getClients() {
         return clients;
     }
 
@@ -65,7 +65,7 @@ public class CemeterySystem implements Serializable {
         return result;
     }
 
-    public void setClients(Map<Integer, Client> clients) {
+    public void setClients(Map<UUID, Client> clients) {
         this.clients = clients;
     }
 
