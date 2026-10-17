@@ -25,7 +25,7 @@
     <div class="toolbar"><h1>Clients</h1></div>
     <div class="table-scroll">
         <table>
-            <thead><tr><th>Client ID</th><th>Member ID</th><th><button class="sort-button" type="button" data-sort="koreanName">Korean name</button></th><th><button class="sort-button" type="button" data-sort="englishName">English name</button></th><th>Action</th></tr></thead>
+            <thead><tr><th>Member ID</th><th><button class="sort-button" type="button" data-sort="koreanName">Korean name</button></th><th><button class="sort-button" type="button" data-sort="englishName">English name</button></th><th>Action</th></tr></thead>
             <tbody id="clients"></tbody>
         </table>
     </div>
@@ -34,7 +34,6 @@
         <h2 id="heading">Add client</h2>
         <p id="message"></p>
         <form id="client-form">
-            <label>ID <input name="id"></label>
             <label>Member ID <input name="memberId" type="number"></label>
             <label>Korean name <input name="koreanName" required></label>
             <label>English surname <input name="englishSurname" required></label>
@@ -44,7 +43,7 @@
             <label>Phone 2 <input name="phone2"></label>
             <label class="wide">Street address <input name="streetAddress"></label>
             <label>City <input name="city"></label><label>State <input name="state"></label><label>ZIP code <input name="zipCode"></label>
-            <div class="wide actions"><button type="submit">Save Client</button><button id="cancel-client" type="button">Cancel</button><span id="client-id"></span></div>
+            <div class="wide actions"><button type="submit">Save Client</button><button id="cancel-client" type="button">Cancel</button></div>
         </form>
     </section>
 </main><script>
@@ -66,15 +65,30 @@
     const displayValue = value => value === null || value === undefined ? 'null' : escapeHtml(value);
     const renderClients = () => {
         const sortedClients = [...clients].sort((first, second) => {
-            if (!sortField) return first.clientId - second.clientId;
+            if (!sortField) return String(first.koreanName ?? '').localeCompare(String(second.koreanName ?? ''), undefined, { sensitivity: 'base' });
             const firstValue = sortField === 'englishName' ? englishName(first) : first[sortField];
             const secondValue = sortField === 'englishName' ? englishName(second) : second[sortField];
             return String(firstValue ?? '').localeCompare(String(secondValue ?? ''), undefined, { sensitivity: 'base' }) * (sortAscending ? 1 : -1);
         });
-        document.querySelector('#clients').innerHTML = sortedClients.map(client =>
-            `<tr><td>${client.clientId}</td><td>${displayValue(client.memberId)}</td><td>${escapeHtml(client.koreanName)}</td><td>${escapeHtml(englishName(client))}</td><td><a href="/admin.html?clientId=${client.clientId}">View / Edit</a></td></tr>`
-        ).join('');
+        document.querySelector('#clients').innerHTML = sortedClients.map(client => {
+            return `<tr><td>${displayValue(client.memberId)}</td><td>${escapeHtml(client.koreanName)}</td><td>${escapeHtml(englishName(client))}</td><td><a href="/admin.html?clientId=${encodeURIComponent(client.id)}">View / Edit</a> <button type="button" data-delete-client="${escapeHtml(client.id)}">Delete</button></td></tr>`;
+        }).join('');
     };
+    document.querySelector('#clients').addEventListener('click', event => {
+        const button = event.target.closest('[data-delete-client]');
+        if (!button) return;
+        const clientId = button.dataset.deleteClient;
+        if (!confirm('Delete this client? The record will be hidden but retained in the database.')) return;
+        fetch(`/api/admin/clients/${encodeURIComponent(clientId)}`, { method: 'DELETE' })
+            .then(async response => {
+                if (response.ok) return;
+                const error = await response.json().catch(() => ({}));
+                throw new Error(error.detail || error.message || 'Unable to delete client.');
+            })
+            .then(() => loadClients())
+            .then(() => message('Client deleted.'))
+            .catch(error => message(error.message));
+    });
     document.querySelectorAll('[data-sort]').forEach(button => button.addEventListener('click', () => {
         const nextField = button.dataset.sort;
         sortAscending = sortField === nextField ? !sortAscending : true;
@@ -87,7 +101,6 @@
         editingClientId = null;
         form.reset();
         document.querySelector('#heading').textContent = 'Add client';
-        document.querySelector('#client-id').textContent = '';
         message('');
         formPane.hidden = false;
         form.elements.koreanName.focus();
@@ -99,12 +112,11 @@
     });
     if (editingClientId) {
         formPane.hidden = false;
-        document.querySelector('#heading').textContent = `Edit client ${editingClientId}`;
+        document.querySelector('#heading').textContent = 'Edit client';
         fetch('/api/admin/clients').then(response => response.ok ? response.json() : Promise.reject()).then(clients => {
-            const client = clients.find(item => String(item.clientId) === editingClientId);
+            const client = clients.find(item => String(item.id) === editingClientId);
             if (!client) throw new Error();
             fields.forEach(field => form.elements[field].value = client[field] ?? '');
-            document.querySelector('#client-id').textContent = `Client ID: ${editingClientId}`;
         }).catch(() => message('Unable to load client.'));
     }
     form.addEventListener('submit', event => {
@@ -116,8 +128,7 @@
         fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
             .then(response => response.ok ? response.json() : response.json().then(error => Promise.reject(error)))
             .then(client => {
-                message(`Client ${client.clientId} saved.`);
-                document.querySelector('#client-id').textContent = `Client ID: ${client.clientId}`;
+                message('Client saved.');
                 return loadClients();
             })
             .then(() => { formPane.hidden = true; })

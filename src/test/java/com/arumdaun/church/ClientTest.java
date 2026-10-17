@@ -1,21 +1,22 @@
 package com.arumdaun.church;
 
+import java.time.LocalDate;
+import java.util.UUID;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-
-import java.time.LocalDate;
-
 import org.junit.jupiter.api.Test;
 
 class ClientTest {
+    private static final UUID CLIENT_ID = UUID.fromString("00000000-0000-0000-0000-000000000007");
 
     @Test
     void constructorNormalizesNullAddressFieldsAndFormatsName() {
-        Client client = new Client(7, "김민수", "Kim", "Minsoo", "", "010-1234", null,
+        Client client = new Client(CLIENT_ID, "김민수", "Kim", "Minsoo", "", "010-1234", null,
                 null, null, null, null);
 
-        assertEquals(7, client.getClientId());
+        assertEquals(CLIENT_ID, client.getId());
         assertEquals("Kim, Minsoo", client.getEnglishFullName());
         assertEquals("김민수 / Kim, Minsoo", client.getDisplayName());
         assertEquals("", client.getStreetAddress());
@@ -56,13 +57,13 @@ class ClientTest {
     void toStringIncludesClientAndPhoneDetails() {
         Client client = newClient();
 
-        assertEquals("Client Id: 7 | Member Id: null | Client Name: 김민수 / Kim, Minsoo | Phones: 010-1234, ",
+        assertEquals("Client Id: " + CLIENT_ID + " | Member Id: null | Client Name: 김민수 / Kim, Minsoo | Phones: 010-1234, ",
                 client.toString());
         assertEquals(null, client.getDeletedDate());
     }
 
     private Client newClient() {
-        return new Client(7, "김민수", "Kim", "Minsoo", "", "010-1234", null,
+        return new Client(CLIENT_ID, "김민수", "Kim", "Minsoo", "", "010-1234", null,
                 "1 Main St", "Irvine", "CA", "92612");
     }
 }

@@ -6,11 +6,12 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.UUID;
 
 public class Purchase implements Serializable {
     private static final long serialVersionUID = 1L;
-    private final String purchaseId;
-    private final int clientId;
+    private final UUID purchaseId;
+    private final UUID clientId;
     private final List<CemeterySystem.CemeteryLot> lots;
     private final double totalPrice;
     private double amountPaid;
@@ -19,7 +20,7 @@ public class Purchase implements Serializable {
     private final LocalDate purchaseDate;
     private LocalDate cancellationDate;
 
-    public Purchase(String purchaseId, int clientId, List<CemeterySystem.CemeteryLot> lots, double totalPrice,
+    public Purchase(UUID purchaseId, UUID clientId, List<CemeterySystem.CemeteryLot> lots, double totalPrice,
             double amountPaid, LocalDate purchaseDate) {
         this.purchaseId = purchaseId;
         this.clientId = clientId;
@@ -29,7 +30,7 @@ public class Purchase implements Serializable {
         this.purchaseDate = purchaseDate;
     }
 
-    public Purchase(int clientId, List<CemeterySystem.CemeteryLot> lots, LocalDate purchaseDate, String purchaseId,
+    public Purchase(UUID clientId, List<CemeterySystem.CemeteryLot> lots, LocalDate purchaseDate, UUID purchaseId,
             double totalPrice) {
         this.clientId = clientId;
         this.lots = lots;
@@ -38,11 +39,11 @@ public class Purchase implements Serializable {
         this.totalPrice = totalPrice;
     }
 
-    public String getPurchaseId() {
+    public UUID getPurchaseId() {
         return purchaseId;
     }
 
-    public int getClientId() {
+    public UUID getClientId() {
         return clientId;
     }
 

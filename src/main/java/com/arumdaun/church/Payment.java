@@ -4,11 +4,12 @@ import java.io.Serializable;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
+import java.util.UUID;
 
 public class Payment implements Serializable {
     private static final long serialVersionUID = 1L;
-    private final String paymentId;
-    private final int clientId;
+    private final UUID paymentId;
+    private final UUID clientId;
     private final double amount;
     private final String method;
     private final LocalDate date;
@@ -16,7 +17,7 @@ public class Payment implements Serializable {
     private final String checkNumber;
     private final String lotIds;
 
-    public Payment(String paymentId, int clientId, double amount, String method, LocalDate date,
+    public Payment(UUID paymentId, UUID clientId, double amount, String method, LocalDate date,
             String type, String checkNumber, String lotIds) {
         this.paymentId = paymentId;
         this.clientId = clientId;
@@ -28,7 +29,7 @@ public class Payment implements Serializable {
         this.lotIds = lotIds;
     }
 
-    public int getClientId() {
+    public UUID getClientId() {
         return clientId;
     }
 

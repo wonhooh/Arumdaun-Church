@@ -15,11 +15,10 @@ public class CemeterySystem implements Serializable {
 
     private static final long serialVersionUID = 1L;
     private Map<String, CemeteryLot> lots = new TreeMap<>();
-    private Map<Integer, Client> clients = new TreeMap<>();
-    private Map<UUID, Client> clientsByUuid = new TreeMap<>();
+    private Map<UUID, Client> clients = new TreeMap<>();
     private Collection<Purchase> purchases = new ArrayList<>();
     private Collection<Payment> payments = new ArrayList<>();
-    private int nextClientId = 102;
+
 
     public boolean isEmpty() {
         return clients.isEmpty() || lots.isEmpty();
@@ -66,7 +65,7 @@ public class CemeterySystem implements Serializable {
         return result;
     }
 
-    public void setClients(Map<Integer, Client> clients) {
+    public void setClients(Map<UUID, Client> clients) {
         this.clients = clients;
     }
 
@@ -88,7 +87,7 @@ public class CemeterySystem implements Serializable {
         }
     }
 
-    public void softDeleteClient(int clientId) {
+    public void softDeleteClient(UUID clientId) {
         Client client = clients.get(clientId);
         if (client == null) {
             throw new IllegalArgumentException("Client not found: " + clientId);
@@ -96,17 +95,17 @@ public class CemeterySystem implements Serializable {
         client.softDelete();
     }
 
-    public List<Purchase> getActivePurchasesForClient(int clientId) {
+    public List<Purchase> getActivePurchasesForClient(UUID clientId) {
         List<Purchase> result = new ArrayList<>();
         for (Purchase purchase : purchases) {
-            if (purchase.getClientId() == clientId && !purchase.isCancelled()) {
+            if (purchase.getClientId().equals(clientId) && !purchase.isCancelled()) {
                 result.add(purchase);
             }
         }
         return result;
     }
 
-    public String getOwnedLotIds(int clientId) {
+    public String getOwnedLotIds(UUID clientId) {
         StringBuilder result = new StringBuilder();
         for (Purchase purchase : getActivePurchasesForClient(clientId)) {
             for (CemeteryLot lot : purchase.getLots()) {
@@ -119,7 +118,7 @@ public class CemeterySystem implements Serializable {
         return result.length() == 0 ? "None" : result.toString();
     }
 
-    public boolean cancelLot(int clientId, String lotNumber, LocalDate cancelDate) {
+    public boolean cancelLot(UUID clientId, String lotNumber, LocalDate cancelDate) {
         for (Purchase purchase : getActivePurchasesForClient(clientId)) {
             for (CemeteryLot lot : purchase.getLots()) {
                 if (lot.getLotNumber().equalsIgnoreCase(lotNumber)) {
@@ -141,12 +140,11 @@ public class CemeterySystem implements Serializable {
         return 0.0;
     }
 
-    public Client addClient(int clientId, String koreanName, String englishSurname, String englishGiven,
+    public Client addClient(UUID clientId, String koreanName, String englishSurname, String englishGiven,
             String englishMiddle, String phone1, String phone2) {
         Client client = new Client(clientId, koreanName, englishSurname, englishGiven, englishMiddle, phone1,
                 phone2, "", "", "", "");
         clients.put(clientId, client);
-        clientsByUuid.put(client.getId(), client);
         return client;
     }
 
@@ -155,17 +153,8 @@ public class CemeterySystem implements Serializable {
             String state, String zipCode) {
         Client client = new Client(id, koreanName, englishSurname, englishGiven, englishMiddle, phone1,
                 phone2, streetAddress, city, state, zipCode);
-        int legacyId = nextClientId++;
-        client.setClientId(legacyId);
-        clients.put(legacyId, client);
-        clientsByUuid.put(id, client);
+        clients.put(id, client);
         return client;
-    }
-
-    public Client addClient(UUID clientId, String koreanName, String englishSurname, String englishGiven,
-            String englishMiddle, String phone1, String phone2) {
-        return addClient(clientId, koreanName, englishSurname, englishGiven, englishMiddle, phone1, phone2,
-                "", "", "", "");
     }
 
     public void addLot(String lotNumber, double price) {
@@ -191,7 +180,7 @@ public class CemeterySystem implements Serializable {
         return lots.get(lotNumber);
     }
 
-    public Purchase purchaseLots(int clientId, List<String> lotNumbers, double initialPayment,
+    public Purchase purchaseLots(UUID clientId, List<String> lotNumbers, double initialPayment,
             LocalDate purchaseDate) {
         Client client = clients.get(clientId);
         if (client == null) {
@@ -219,7 +208,7 @@ public class CemeterySystem implements Serializable {
 
         LocalDate effectivePurchaseDate = purchaseDate != null ? purchaseDate : LocalDate.now();
         Purchase purchase = new Purchase(
-                UUID.randomUUID().toString(),
+            UUID.randomUUID(),
                 clientId,
                 selectedLots,
                 total,
@@ -234,7 +223,7 @@ public class CemeterySystem implements Serializable {
         return purchase;
     }
 
-    public boolean cancelPurchase(String purchaseId, LocalDate cancelDate) {
+    public boolean cancelPurchase(UUID purchaseId, LocalDate cancelDate) {
         Purchase purchase = findPurchaseById(purchaseId);
         if (purchase == null || purchase.isCancelled()) {
             return false;
@@ -252,7 +241,7 @@ public class CemeterySystem implements Serializable {
 
         if (refund > 0) {
             Payment refundPayment = new Payment(
-                    UUID.randomUUID().toString(),
+                    UUID.randomUUID(),
                     purchase.getClientId(),
                     refund,
                     "Refund",
@@ -266,7 +255,7 @@ public class CemeterySystem implements Serializable {
         return true;
     }
 
-    public Payment recordPayment(int clientId, double amount, String method, String checkNumber,
+    public Payment recordPayment(UUID clientId, double amount, String method, String checkNumber,
             LocalDate paymentDate) {
         if (!clients.containsKey(clientId)) {
             throw new IllegalArgumentException("Client not found: " + clientId);
@@ -279,7 +268,7 @@ public class CemeterySystem implements Serializable {
         }
 
         Payment payment = new Payment(
-                UUID.randomUUID().toString(),
+                UUID.randomUUID(),
                 clientId,
                 amount,
                 method,
@@ -290,7 +279,7 @@ public class CemeterySystem implements Serializable {
         payments.add(payment);
 
         for (Purchase purchase : purchases) {
-            if (purchase.getClientId() == clientId && !purchase.isCancelled()) {
+            if (purchase.getClientId().equals(clientId) && !purchase.isCancelled()) {
                 purchase.addPayment(amount);
                 break;
             }
@@ -298,9 +287,9 @@ public class CemeterySystem implements Serializable {
         return payment;
     }
 
-    private String getActiveLotIds(int clientId) {
+    private String getActiveLotIds(UUID clientId) {
         for (Purchase purchase : purchases) {
-            if (purchase.getClientId() == clientId && !purchase.isCancelled()) {
+            if (purchase.getClientId().equals(clientId) && !purchase.isCancelled()) {
                 return formatLotIds(purchase.getLots());
             }
         }
@@ -318,10 +307,10 @@ public class CemeterySystem implements Serializable {
         return result.toString();
     }
 
-    public String getPaymentHistoryText(int clientId) {
+    public String getPaymentHistoryText(UUID clientId) {
         List<Payment> paymentsForClient = new ArrayList<>();
         for (Payment payment : payments) {
-            if (payment.getClientId() == clientId) {
+            if (payment.getClientId().equals(clientId)) {
                 paymentsForClient.add(payment);
             }
         }
@@ -339,12 +328,12 @@ public class CemeterySystem implements Serializable {
         return builder.toString();
     }
 
-    public String getClientTransactionText(int clientId) {
+    public String getClientTransactionText(UUID clientId) {
         StringBuilder builder = new StringBuilder();
         builder.append("PURCHASES AND CANCELLATIONS\n");
         boolean hasPurchase = false;
         for (Purchase purchase : purchases) {
-            if (purchase.getClientId() == clientId) {
+            if (purchase.getClientId().equals(clientId)) {
                 builder.append(purchase.reportSummary()).append("\n");
                 hasPurchase = true;
             }
@@ -356,7 +345,7 @@ public class CemeterySystem implements Serializable {
         builder.append("\nPAYMENTS\n");
         boolean hasPayment = false;
         for (Payment payment : payments) {
-            if (payment.getClientId() == clientId) {
+            if (payment.getClientId().equals(clientId)) {
                 builder.append(payment).append("\n");
                 hasPayment = true;
             }
@@ -413,9 +402,9 @@ public class CemeterySystem implements Serializable {
         return builder.toString();
     }
 
-    private Purchase findPurchaseById(String purchaseId) {
+    private Purchase findPurchaseById(UUID purchaseId) {
         for (Purchase purchase : purchases) {
-            if (purchase.getPurchaseId().equalsIgnoreCase(purchaseId)) {
+            if (purchase.getPurchaseId().equals(purchaseId)) {
                 return purchase;
             }
         }
@@ -431,7 +420,7 @@ public class CemeterySystem implements Serializable {
         private final String lotNumber;
         private final double price;
         private boolean sold;
-        private Integer clientId;
+        private UUID clientId;
         private String information;
 
         public CemeteryLot(String lotNumber, double price, String information) {
@@ -458,11 +447,11 @@ public class CemeterySystem implements Serializable {
             this.sold = sold;
         }
 
-        public Integer getClientId() {
+        public UUID getClientId() {
             return clientId;
         }
 
-        public void setClientId(Integer clientId) {
+        public void setClientId(UUID clientId) {
             this.clientId = clientId;
         }
 

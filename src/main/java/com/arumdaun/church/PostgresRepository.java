@@ -9,6 +9,8 @@ import java.util.UUID;
 
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 @Repository
 public class PostgresRepository {
@@ -65,6 +67,22 @@ public class PostgresRepository {
         return loadSystem().getClients().get(clientId);
     }
 
+    public void softDeleteClient(UUID clientId) {
+        int updated = jdbcTemplate.update("""
+                UPDATE clients SET deleted_date = CURRENT_DATE
+                WHERE id = ? AND deleted_date IS NULL
+                """, clientId);
+        if (updated == 1) {
+            return;
+        }
+
+        Boolean clientExists = jdbcTemplate.queryForObject(
+                "SELECT EXISTS (SELECT 1 FROM clients WHERE id = ?)", Boolean.class, clientId);
+        if (!Boolean.TRUE.equals(clientExists)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Client not found");
+        }
+    }
+
     public CemeterySystem loadSystem() {
         CemeterySystem system = new CemeterySystem();
         Map<UUID, Client> clients = new LinkedHashMap<>();
@@ -106,7 +124,8 @@ public class PostgresRepository {
                     rs.getString("lot_number"),
                     rs.getDouble("price"),
                     rs.getString("information"));
-            lot.setClientId(null);
+            String clientId = rs.getString("client_id");
+            lot.setClientId(clientId == null ? null : UUID.fromString(clientId));
             lots.put(lot.getLotNumber(), lot);
         });
 
@@ -119,6 +138,7 @@ public class PostgresRepository {
                 ORDER BY transaction_date, id
                 """, rs -> {
             UUID purchaseId = rs.getObject("id", UUID.class);
+            UUID clientId = rs.getObject("client_id", UUID.class);
             List<CemeterySystem.CemeteryLot> purchaseLots = new ArrayList<>();
             String[] lotNumbers = (String[]) rs.getArray("lot_numbers").getArray();
             for (String lotNumber : lotNumbers) {
@@ -128,8 +148,8 @@ public class PostgresRepository {
                 }
             }
             Purchase purchase = new Purchase(
-                    purchaseId.toString(),
-                    0,
+                    purchaseId,
+                    clientId,
                     purchaseLots,
                     rs.getDouble("total_price"),
                     rs.getDouble("amount_paid"),
@@ -150,8 +170,8 @@ public class PostgresRepository {
                 WHERE transaction_type IN ('PAYMENT', 'REFUND')
                 ORDER BY transaction_date, id
                     """, (rs, rowNum) -> new Payment(
-                rs.getObject("id", UUID.class).toString(),
-                0,
+                    rs.getObject("id", UUID.class),
+                rs.getObject("client_id", UUID.class),
                 "REFUND".equalsIgnoreCase(rs.getString("transaction_type"))
                         ? rs.getDouble("refund_amount")
                         : rs.getDouble("amount"),
@@ -165,6 +185,7 @@ public class PostgresRepository {
         system.setLots(lots);
         system.setPurchases(purchases);
         system.setPayments(payments);
+        system.reconcileLotOwnership();
         return system;
     }
 }
