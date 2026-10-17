@@ -9,6 +9,7 @@ import java.util.UUID;
 
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -23,6 +24,17 @@ public class PostgresRepository {
     public boolean isAvailable() {
         jdbcTemplate.queryForObject("SELECT 1", Integer.class);
         return true;
+    }
+
+    public Map<String, Object> createLot(String lotNumber, double price, String information) {
+        try {
+            jdbcTemplate.update("INSERT INTO lots (lot_number, price, information) VALUES (?, ?, ?)",
+                    lotNumber, price, information == null ? "" : information);
+        } catch (DuplicateKeyException exception) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "A lot with this number already exists");
+        }
+        return Map.of("lotNumber", lotNumber, "price", price, "information", information == null ? "" : information,
+                "sold", false);
     }
 
     public Client createClient(CemeteryController.ClientRequest request) {
@@ -170,7 +182,7 @@ public class PostgresRepository {
                 WHERE transaction_type IN ('PAYMENT', 'REFUND')
                 ORDER BY transaction_date, id
                     """, (rs, rowNum) -> new Payment(
-                    rs.getObject("id", UUID.class),
+                rs.getObject("id", UUID.class),
                 rs.getObject("client_id", UUID.class),
                 "REFUND".equalsIgnoreCase(rs.getString("transaction_type"))
                         ? rs.getDouble("refund_amount")

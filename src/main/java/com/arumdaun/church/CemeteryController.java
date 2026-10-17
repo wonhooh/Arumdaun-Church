@@ -41,6 +41,17 @@ public class CemeteryController {
                 .toList();
     }
 
+    @PostMapping("/api/admin/lots")
+    public Map<String, Object> createLot(@RequestBody LotRequest request) {
+        if (request.lotNumber() == null || request.lotNumber().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Lot number is required");
+        }
+        if (!Double.isFinite(request.price()) || request.price() < 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Price must be zero or greater");
+        }
+        return repository.createLot(request.lotNumber().trim(), request.price(), request.information());
+    }
+
     @GetMapping("/api/clients")
     public List<Map<String, Object>> clients() {
         CemeterySystem system = repository.loadSystem();
@@ -109,5 +120,8 @@ public class CemeteryController {
                     client.getPhone2(), client.getStreetAddress(), client.getCity(), client.getState(),
                     client.getZipCode());
         }
+    }
+
+    public record LotRequest(String lotNumber, double price, String information) {
     }
 }
