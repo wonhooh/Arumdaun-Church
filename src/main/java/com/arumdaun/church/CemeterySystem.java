@@ -49,12 +49,12 @@ public class CemeterySystem implements Serializable {
         this.lots = lots;
     }
 
-    public Client getClient(int clientId) {
+    public Client getClient(UUID clientId) {
         return clients.get(clientId);
     }
 
     public Map<UUID, Client> getClients() {
-        return clientsByUuid;
+        return clients;
     }
 
     public List<Client> getClients(boolean includeDeleted) {
@@ -66,17 +66,8 @@ public class CemeterySystem implements Serializable {
         return result;
     }
 
-    public void setClients(Map<UUID, Client> clientsByUuid) {
-        this.clientsByUuid = clientsByUuid;
-        this.clients.clear();
-        for (Client client : clientsByUuid.values()) {
-            int legacyId = client.getClientId();
-            if (legacyId == 0) {
-                legacyId = nextClientId++;
-                client.setClientId(legacyId);
-            }
-            this.clients.put(legacyId, client);
-        }
+    public void setClients(Map<Integer, Client> clients) {
+        this.clients = clients;
     }
 
     public void reconcileLotOwnership() {
