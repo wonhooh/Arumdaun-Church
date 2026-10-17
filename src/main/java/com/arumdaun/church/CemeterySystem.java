@@ -15,7 +15,8 @@ public class CemeterySystem implements Serializable {
 
     private static final long serialVersionUID = 1L;
     private Map<String, CemeteryLot> lots = new TreeMap<>();
-    private Map<UUID, Client> clients = new TreeMap<>();
+    private Map<Integer, Client> clients = new TreeMap<>();
+    private Map<UUID, Client> clientsByUuid = new TreeMap<>();
     private Collection<Purchase> purchases = new ArrayList<>();
     private Collection<Payment> payments = new ArrayList<>();
     private int nextClientId = 102;
@@ -52,8 +53,8 @@ public class CemeterySystem implements Serializable {
         return clients.get(clientId);
     }
 
-    public Map<Integer, Client> getClients() {
-        return clients;
+    public Map<UUID, Client> getClients() {
+        return clientsByUuid;
     }
 
     public List<Client> getClients(boolean includeDeleted) {
@@ -65,8 +66,17 @@ public class CemeterySystem implements Serializable {
         return result;
     }
 
-    public void setClients(Map<Integer, Client> clients) {
-        this.clients = clients;
+    public void setClients(Map<UUID, Client> clientsByUuid) {
+        this.clientsByUuid = clientsByUuid;
+        this.clients.clear();
+        for (Client client : clientsByUuid.values()) {
+            int legacyId = client.getClientId();
+            if (legacyId == 0) {
+                legacyId = nextClientId++;
+                client.setClientId(legacyId);
+            }
+            this.clients.put(legacyId, client);
+        }
     }
 
     public void reconcileLotOwnership() {
@@ -140,16 +150,28 @@ public class CemeterySystem implements Serializable {
         return 0.0;
     }
 
+    public Client addClient(int clientId, String koreanName, String englishSurname, String englishGiven,
+            String englishMiddle, String phone1, String phone2) {
+        Client client = new Client(clientId, koreanName, englishSurname, englishGiven, englishMiddle, phone1,
+                phone2, "", "", "", "");
+        clients.put(clientId, client);
+        clientsByUuid.put(client.getId(), client);
+        return client;
+    }
+
     public Client addClient(UUID id, String koreanName, String englishSurname, String englishGiven,
             String englishMiddle, String phone1, String phone2, String streetAddress, String city,
             String state, String zipCode) {
         Client client = new Client(id, koreanName, englishSurname, englishGiven, englishMiddle, phone1,
                 phone2, streetAddress, city, state, zipCode);
-        clients.put(id, client);
+        int legacyId = nextClientId++;
+        client.setClientId(legacyId);
+        clients.put(legacyId, client);
+        clientsByUuid.put(id, client);
         return client;
     }
 
-    public Client addClient(int clientId, String koreanName, String englishSurname, String englishGiven,
+    public Client addClient(UUID clientId, String koreanName, String englishSurname, String englishGiven,
             String englishMiddle, String phone1, String phone2) {
         return addClient(clientId, koreanName, englishSurname, englishGiven, englishMiddle, phone1, phone2,
                 "", "", "", "");
@@ -213,7 +235,7 @@ public class CemeterySystem implements Serializable {
                 initialPayment,
                 effectivePurchaseDate);
         purchases.add(purchase);
-        client.addPurchase(purchase);
+        //client.addPurchase(purchase);
 
         if (initialPayment > 0) {
             recordPayment(clientId, initialPayment, "Cash", "", effectivePurchaseDate);

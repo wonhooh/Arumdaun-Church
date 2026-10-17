@@ -1,12 +1,14 @@
 package com.arumdaun.church;
 
 import java.io.Serializable;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.util.UUID;
 
 public class Client implements Serializable {
     private static final long serialVersionUID = 1L;
     private UUID id;
+    private Integer clientId;
     private Integer memberId;
     private String koreanName;
     private String englishSurname;
@@ -20,6 +22,25 @@ public class Client implements Serializable {
     private String zipCode;
     private boolean deleted;
     private LocalDate deletedDate;
+
+    public Client(int clientId, String koreanName, String englishSurname, String englishGivenName,
+            String englishMiddleName, String phone1, String phone2, String streetAddress, String city,
+            String state, String zipCode) {
+        this.clientId = clientId;
+        this.id = UUID.nameUUIDFromBytes(("legacy-client:" + clientId).getBytes(StandardCharsets.UTF_8));
+        this.koreanName = koreanName;
+        this.englishSurname = englishSurname;
+        this.englishGivenName = englishGivenName;
+        this.englishMiddleName = englishMiddleName;
+        this.phone1 = phone1;
+        this.phone2 = phone2;
+        this.streetAddress = streetAddress == null ? "" : streetAddress;
+        this.city = city == null ? "" : city;
+        this.state = state == null ? "" : state;
+        this.zipCode = zipCode == null ? "" : zipCode;
+        this.deleted = false;
+        this.deletedDate = null;
+    }
 
     public Client(UUID id, String koreanName, String englishSurname, String englishGivenName,
             String englishMiddleName, String phone1, String phone2, String streetAddress, String city,
@@ -41,6 +62,17 @@ public class Client implements Serializable {
 
     public UUID getId() {
         return id;
+    }
+
+    public int getClientId() {
+        if (clientId != null) {
+            return clientId;
+        }
+        return 0;
+    }
+
+    public void setClientId(int clientId) {
+        this.clientId = clientId;
     }
 
     public Integer getMemberId() {
@@ -132,7 +164,7 @@ public class Client implements Serializable {
 
     @Override
     public String toString() {
-        return "Id: " + id + " | Member Id: " + memberId + " | Client Name: " + getDisplayName() +
+        return "Client Id: " + clientId + " | Member Id: " + memberId + " | Client Name: " + getDisplayName() +
                 " | Phones: " + phone1 + ", " + (phone2 == null ? "" : phone2);
     }
 
