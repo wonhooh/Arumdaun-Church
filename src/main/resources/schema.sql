@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS clients (
     city VARCHAR(64) NOT NULL DEFAULT '',
     state VARCHAR(64) NOT NULL DEFAULT '',
     zip_code VARCHAR(64) NOT NULL DEFAULT '',
+    deleted BOOLEAN NOT NULL DEFAULT FALSE,
     deleted_date DATE
 );
 
@@ -19,7 +20,8 @@ CREATE TABLE IF NOT EXISTS lots (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     client_id UUID REFERENCES clients(id),
     lot_number TEXT NOT NULL UNIQUE,
-    price INTEGER NOT NULL,
+    price NUMERIC(12, 2) NOT NULL,
+    sold BOOLEAN NOT NULL DEFAULT FALSE,
     information TEXT NOT NULL DEFAULT ''
 );
 

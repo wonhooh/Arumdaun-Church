@@ -19,9 +19,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.ConnectionCallback;
@@ -29,6 +26,10 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 @Repository
 public class PostgresRepository {
@@ -383,7 +384,7 @@ public class PostgresRepository {
 
     public void softDeleteClient(UUID clientId) {
         int updated = jdbcTemplate.update("""
-                UPDATE clients SET deleted_date = CURRENT_DATE
+            UPDATE clients SET deleted = TRUE, deleted_date = CURRENT_DATE
                 WHERE id = ? AND deleted_date IS NULL
                 """, clientId);
         if (updated == 1) {
@@ -403,8 +404,8 @@ public class PostgresRepository {
         Map<String, CemeterySystem.CemeteryLot> lots = new LinkedHashMap<>();
 
         jdbcTemplate.query("""
-                SELECT id, member_id, korean_name, surname, given_name, middle_name,
-                       phone1, phone2, street_1, street_2, city, state, zip_code, deleted_date
+                  SELECT id, member_id, korean_name, surname, given_name, middle_name,
+                      phone1, phone2, street_1, street_2, city, state, zip_code, deleted, deleted_date
                 FROM clients ORDER BY korean_name
                 """, rs -> {
             UUID id = UUID.fromString(rs.getString("id"));
@@ -424,7 +425,7 @@ public class PostgresRepository {
             if (memberId != null && !memberId.isBlank()) {
                 client.setMemberId(Integer.parseInt(memberId));
             }
-            if (rs.getDate("deleted_date") != null) {
+            if (rs.getBoolean("deleted") || rs.getDate("deleted_date") != null) {
                 client.softDelete();
             }
             clients.put(client.getId(), client);

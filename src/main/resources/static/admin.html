@@ -207,9 +207,19 @@
                 method: 'POST',
                 body: formData
             });
-            const result = await response.json().catch(() => ({}));
+            const responseText = await response.text();
+            let result = {};
+            if (responseText) {
+                try {
+                    result = JSON.parse(responseText);
+                } catch {
+                    result.detail = responseText.trim().slice(0, 400);
+                }
+            }
             if (!response.ok) {
-                throw new Error(result.detail || result.message || 'Unable to upload CSV.');
+                const reason = result.detail || result.message || result.error || result.title
+                    || `HTTP ${response.status} ${response.statusText}`.trim();
+                throw new Error(`CSV upload failed: ${reason}`);
             }
             tableMessage.textContent = `${result.rowsProcessed} row${result.rowsProcessed === 1 ? '' : 's'} uploaded.`;
             const button = [...tableButtons].find(item => item.dataset.table === tableName);

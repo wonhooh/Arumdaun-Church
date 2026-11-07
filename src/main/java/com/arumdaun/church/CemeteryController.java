@@ -8,6 +8,7 @@ import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -51,13 +52,19 @@ public class CemeteryController {
     }
 
     @PostMapping(path = "/api/admin/tables/{tableName}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public PostgresRepository.TableUploadResult uploadAdminTable(
+    public ResponseEntity<?> uploadAdminTable(
             @PathVariable String tableName,
-            @RequestParam("file") MultipartFile file) {
+            @RequestParam(value = "file", required = false) MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("detail", "Choose a non-empty CSV file"));
+        }
         try {
-            return repository.upsertAdminTableCsv(tableName, file.getBytes());
+            return ResponseEntity.ok(repository.upsertAdminTableCsv(tableName, file.getBytes()));
+        } catch (ResponseStatusException exception) {
+            String reason = exception.getReason() == null ? "CSV upload was rejected" : exception.getReason();
+            return ResponseEntity.status(exception.getStatusCode()).body(Map.of("detail", reason));
         } catch (IOException exception) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unable to read uploaded CSV file");
+            return ResponseEntity.badRequest().body(Map.of("detail", "Unable to read uploaded CSV file"));
         }
     }
 

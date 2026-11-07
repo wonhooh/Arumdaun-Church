@@ -12,6 +12,8 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -109,5 +111,19 @@ class AdminTableAccessTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.table").value("clients"))
                 .andExpect(jsonPath("$.rowsProcessed").value(1));
+    }
+
+    @Test
+    void csvUploadReturnsValidationReason() throws Exception {
+        byte[] csv = "id,korean_name\n00000000-0000-0000-0000-000000000001,김민수\n"
+                .getBytes(StandardCharsets.UTF_8);
+        when(repository.upsertAdminTableCsv("clients", csv))
+                .thenThrow(new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown column: legacy_field"));
+
+        mockMvc.perform(multipart("/api/admin/tables/clients")
+                        .file(new MockMultipartFile("file", "clients.csv", "text/csv", csv))
+                        .header("Authorization", ADMIN_AUTHORIZATION))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value("Unknown column: legacy_field"));
     }
 }

@@ -8,6 +8,9 @@ final class AdminCsvParser {
     }
 
     static List<List<String>> parse(String csv) {
+        if (csv.startsWith("\uFEFF")) {
+            csv = csv.substring(1);
+        }
         List<List<String>> records = new ArrayList<>();
         List<String> record = new ArrayList<>();
         StringBuilder field = new StringBuilder();
@@ -63,9 +66,6 @@ final class AdminCsvParser {
         if (!record.isEmpty() || !field.isEmpty() || afterQuote) {
             record.add(field.toString());
             records.add(record);
-        }
-        if (!records.isEmpty() && records.getFirst().getFirst().startsWith("\uFEFF")) {
-            records.getFirst().set(0, records.getFirst().getFirst().substring(1));
         }
         return records;
     }
