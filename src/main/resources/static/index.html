@@ -21,10 +21,6 @@
         .status { color: #176b45; font-weight: 700; }
         .section-heading { margin-top: 36px; }
         .button { display: inline-block; padding: 10px 16px; border: 0; border-radius: 6px; background: #176b45; color: white; text-decoration: none; font: inherit; cursor: pointer; }
-        .table-scroll { max-height: 320px; overflow-y: auto; background: white; margin-top: 16px; }
-        table { width: 100%; border-collapse: collapse; }
-        th, td { padding: 12px 14px; border-bottom: 1px solid #d9e1e6; text-align: left; }
-        th { position: sticky; top: 0; background: #e8eef2; z-index: 1; }
     </style>
 </head>
 <body>
@@ -40,33 +36,15 @@
     </section>
     <p class="status" id="status">Connecting to Spring Boot...</p>
     <section class="section-heading">
-        <h2>Available lots</h2>
-        <div class="table-scroll">
-            <table>
-                <thead><tr><th>Lot</th><th>Status</th><th>Information</th></tr></thead>
-                <tbody id="lots"></tbody>
-            </table>
-        </div>
-    </section>
-    <section class="section-heading">
         <h2>Administration</h2>
         <a class="button" href="/admin.html">View clients</a>
         <a class="button" href="/lots-admin.html">Enter lot information</a>
     </section>
 </main>
 <script>
-    const money = value => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
-    const escapeHtml = value => String(value ?? '').replace(/[&<>'\"]/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '\"': '&quot;' }[character]));
-    Promise.all([fetch('/api/health'), fetch('/api/lots')])
-        .then(async ([healthResponse, lotsResponse]) => {
-            if (!healthResponse.ok || !lotsResponse.ok) throw new Error('Request failed');
-            const health = await healthResponse.json();
-            const lots = await lotsResponse.json();
-            document.querySelector('#status').textContent = `Spring Boot status: ${health.status}`;
-            document.querySelector('#lots').innerHTML = lots.map(lot =>
-                `<tr><td>${escapeHtml(lot.lotNumber)}</td><td>${lot.sold ? 'Reserved' : 'Available'}</td><td>${escapeHtml(lot.information)}</td></tr>`
-            ).join('');
-        })
+    fetch('/api/health')
+        .then(response => response.ok ? response.json() : Promise.reject(new Error('Request failed')))
+        .then(health => { document.querySelector('#status').textContent = `Spring Boot status: ${health.status}`; })
         .catch(() => { document.querySelector('#status').textContent = 'Unable to connect to Spring Boot'; });
 </script>
 </body>

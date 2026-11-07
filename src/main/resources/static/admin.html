@@ -8,9 +8,53 @@
         :root { font-family: system-ui, sans-serif; color: #17202a; background: #f3f6f8; }
         body { margin: 0; } main { max-width: 1100px; margin: 0 auto; padding: 48px 24px; }
         .toolbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
-        .table-scroll { max-height: 320px; overflow-y: auto; background: white; margin: 16px 0 32px; }
-        table { width: 100%; border-collapse: collapse; } th, td { padding: 12px 14px; border-bottom: 1px solid #d9e1e6; text-align: left; }
+        .table-scroll { max-height: 320px; overflow: auto; background: white; margin: 16px 0 32px; }
+        table { width: max-content; min-width: 100%; border-collapse: collapse; }
+        th, td { max-width: 24rem; padding: 12px 14px; border-bottom: 1px solid #d9e1e6; text-align: left; overflow-wrap: anywhere; }
         th { position: sticky; top: 0; background: #e8eef2; z-index: 1; }
+        .table-actions, .table-toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+        .table-actions button[aria-pressed="true"] { background: #124d34; }
+        .table-toolbar { justify-content: space-between; }
+        .table-toolbar > div { display: flex; flex-wrap: wrap; gap: 12px; }
+        .table-toolbar h3 { margin: 0; }
+        .table-scroll.full-table {
+            display: block;
+            width: 100%;
+            max-width: 100%;
+            box-sizing: border-box;
+            max-height: 520px;
+            overflow-x: scroll;
+            overflow-y: auto;
+            scrollbar-width: auto;
+            scrollbar-color: #687780 #d9e1e6;
+        }
+        .table-scroll.full-table table { width: max-content; min-width: max-content; }
+        .table-scroll.full-table th, .table-scroll.full-table td {
+            max-width: none;
+            white-space: nowrap;
+            overflow-wrap: normal;
+        }
+        .horizontal-scroll-control { margin: 8px 0; }
+        .horizontal-scroll-control label { display: block; margin-bottom: 4px; font-size: .9rem; }
+        .horizontal-scroll-control input {
+            display: block;
+            width: 100%;
+            height: 28px;
+            padding: 0;
+            accent-color: #176b45;
+            cursor: ew-resize;
+        }
+        .table-scroll.full-table::-webkit-scrollbar { height: 14px; }
+        .table-scroll.full-table::-webkit-scrollbar-track { background: #d9e1e6; }
+        .table-scroll.full-table::-webkit-scrollbar-thumb {
+            border: 3px solid #d9e1e6;
+            border-radius: 8px;
+            background: #687780;
+        }
+        .client-row-actions { display: grid; gap: 8px; margin: 12px 0 24px; }
+        .client-row-action { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 10px 12px; background: white; border-bottom: 1px solid #d9e1e6; }
+        .client-row-action span { flex: 1 1 240px; overflow-wrap: anywhere; }
+        .client-row-action button, .client-row-action a { padding: 7px 12px; }
         .sort-button { padding: 0; border: 0; background: transparent; color: inherit; font: inherit; font-weight: 700; cursor: pointer; }
         .add-client { margin-bottom: 24px; }
         form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; background: white; padding: 24px; }
@@ -22,13 +66,36 @@
 </head>
 <body><main>
     <p><a href="/">Back to landing page</a></p>
-    <div class="toolbar"><h1>Clients</h1></div>
-    <div class="table-scroll">
-        <table>
-            <thead><tr><th>Member ID</th><th><button class="sort-button" type="button" data-sort="koreanName">Korean name</button></th><th><button class="sort-button" type="button" data-sort="englishName">English name</button></th><th>Action</th></tr></thead>
-            <tbody id="clients"></tbody>
-        </table>
-    </div>
+    <section aria-labelledby="table-data-heading">
+        <h2 id="table-data-heading">Database tables</h2>
+        <p>Select a table to view all its records, download a CSV, or upload a CSV to insert or update records. Upserts use client ID, lot number, or transaction ID as the matching key.</p>
+        <div class="table-actions" aria-label="Choose a database table">
+            <button type="button" data-table="clients" aria-pressed="false">Clients</button>
+            <button type="button" data-table="lots" aria-pressed="false">Lots</button>
+            <button type="button" data-table="transactions" aria-pressed="false">Transactions</button>
+        </div>
+        <p id="table-message" role="status" aria-live="polite"></p>
+        <div class="table-toolbar" id="table-toolbar" hidden>
+            <h3 id="selected-table-title"></h3>
+            <div>
+                <button id="download-table" type="button" disabled>Download CSV</button>
+                <button id="upload-table" type="button" disabled>Upload CSV</button>
+                <input id="upload-table-file" type="file" accept=".csv,text/csv" hidden>
+            </div>
+        </div>
+        <div class="horizontal-scroll-control" id="horizontal-scroll-control" hidden>
+            <label for="table-horizontal-scroll">Scroll table horizontally</label>
+            <input id="table-horizontal-scroll" type="range" min="0" max="0" value="0"
+                   aria-controls="admin-table-container" aria-label="Scroll table horizontally">
+        </div>
+        <div class="table-scroll full-table" id="admin-table-container" hidden>
+            <table>
+                <thead id="admin-table-head"></thead>
+                <tbody id="admin-table-body"></tbody>
+            </table>
+        </div>
+        <div id="client-row-actions" class="client-row-actions" role="group" aria-label="Actions for clients" hidden></div>
+    </section>
     <button class="add-client" id="add-client" type="button">Add new client</button>
     <section id="client-form-pane" hidden>
         <h2 id="heading">Add client</h2>
@@ -47,6 +114,145 @@
         </form>
     </section>
 </main><script>
+    const tableButtons = document.querySelectorAll('[data-table]');
+    const tableMessage = document.querySelector('#table-message');
+    const downloadTableButton = document.querySelector('#download-table');
+    const uploadTableButton = document.querySelector('#upload-table');
+    const uploadTableFile = document.querySelector('#upload-table-file');
+    const tableToolbar = document.querySelector('#table-toolbar');
+    const tableContainer = document.querySelector('#admin-table-container');
+    const horizontalScrollControl = document.querySelector('#horizontal-scroll-control');
+    const horizontalScroll = document.querySelector('#table-horizontal-scroll');
+    let selectedTable = null;
+    const escapeHtml = value => String(value ?? '').replace(/[&<>'\"]/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '\"': '&quot;' }[character]));
+    const updateHorizontalScroll = () => {
+        const maxScroll = Math.max(0, tableContainer.scrollWidth - tableContainer.clientWidth);
+        horizontalScroll.max = String(maxScroll);
+        horizontalScroll.value = String(Math.min(tableContainer.scrollLeft, maxScroll));
+        horizontalScrollControl.hidden = maxScroll === 0;
+    };
+    horizontalScroll.addEventListener('input', () => {
+        tableContainer.scrollLeft = Number(horizontalScroll.value);
+    });
+    tableContainer.addEventListener('scroll', () => {
+        horizontalScroll.value = String(tableContainer.scrollLeft);
+    });
+    window.addEventListener('resize', updateHorizontalScroll);
+    const showTable = async button => {
+        const tableName = button.dataset.table;
+        tableMessage.textContent = `Loading ${tableName}...`;
+        downloadTableButton.disabled = true;
+        uploadTableButton.disabled = true;
+        try {
+            const response = await fetch(`/api/admin/tables/${encodeURIComponent(tableName)}`);
+            if (!response.ok) throw new Error(`Unable to load ${tableName}.`);
+            const data = await response.json();
+            selectedTable = data;
+            const hasClientActions = data.name === 'clients';
+            document.querySelector('#selected-table-title').textContent =
+                `${data.name.charAt(0).toUpperCase()}${data.name.slice(1)}`;
+            document.querySelector('#admin-table-head').innerHTML =
+                `<tr>${data.columns.map(column => `<th scope="col">${escapeHtml(column)}</th>`).join('')}</tr>`;
+            document.querySelector('#admin-table-body').innerHTML = data.rows.length
+                ? data.rows.map(row => `<tr>${row.map(value =>
+                        `<td>${escapeHtml(Array.isArray(value) ? value.join(', ') : value)}</td>`
+                    ).join('')}</tr>`).join('')
+                : `<tr><td colspan="${data.columns.length}">No records found.</td></tr>`;
+            const clientActions = document.querySelector('#client-row-actions');
+            clientActions.hidden = !hasClientActions;
+            clientActions.innerHTML = hasClientActions
+                ? data.rows.map(row => {
+                    const value = column => row[data.columns.indexOf(column)];
+                    const clientId = value('id');
+                    const name = [value('korean_name'), value('surname'), value('given_name')]
+                        .filter(Boolean).join(' / ') || clientId;
+                    return `<div class="client-row-action"><span>${escapeHtml(name)} (ID: ${escapeHtml(clientId)})</span><a href="/admin.html?clientId=${encodeURIComponent(clientId)}">View / Edit</a> <button type="button" data-delete-client="${escapeHtml(clientId)}">Delete</button></div>`;
+                }).join('')
+                : '';
+            tableContainer.hidden = false;
+            const table = tableContainer.querySelector('table');
+            table.style.minWidth = `${Math.max(data.columns.length * 150, tableContainer.clientWidth)}px`;
+            tableContainer.scrollLeft = 0;
+            tableToolbar.hidden = false;
+            downloadTableButton.disabled = false;
+            uploadTableButton.disabled = false;
+            tableButtons.forEach(item => item.setAttribute('aria-pressed', String(item === button)));
+            tableMessage.textContent = `${data.rows.length} record${data.rows.length === 1 ? '' : 's'} loaded.`;
+            requestAnimationFrame(updateHorizontalScroll);
+        } catch (error) {
+            selectedTable = null;
+            tableContainer.hidden = true;
+            tableToolbar.hidden = true;
+            horizontalScrollControl.hidden = true;
+            document.querySelector('#client-row-actions').hidden = true;
+            tableButtons.forEach(item => item.setAttribute('aria-pressed', 'false'));
+            document.querySelector('#selected-table-title').textContent = '';
+            tableMessage.textContent = error.message || `Unable to load ${tableName}.`;
+        }
+    };
+    tableButtons.forEach(button => button.addEventListener('click', () => showTable(button)));
+    uploadTableButton.addEventListener('click', () => {
+        if (selectedTable) uploadTableFile.click();
+    });
+    uploadTableFile.addEventListener('change', async () => {
+        const file = uploadTableFile.files[0];
+        const tableName = selectedTable?.name;
+        if (!file || !tableName) return;
+        uploadTableButton.disabled = true;
+        tableMessage.textContent = `Uploading ${file.name}...`;
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+            const response = await fetch(`/api/admin/tables/${encodeURIComponent(tableName)}`, {
+                method: 'POST',
+                body: formData
+            });
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(result.detail || result.message || 'Unable to upload CSV.');
+            }
+            tableMessage.textContent = `${result.rowsProcessed} row${result.rowsProcessed === 1 ? '' : 's'} uploaded.`;
+            const button = [...tableButtons].find(item => item.dataset.table === tableName);
+            if (button) await showTable(button);
+        } catch (error) {
+            tableMessage.textContent = error.message || 'Unable to upload CSV.';
+            uploadTableButton.disabled = false;
+        } finally {
+            uploadTableFile.value = '';
+        }
+    });
+    downloadTableButton.addEventListener('click', () => {
+        if (!selectedTable) return;
+        const requestedName = window.prompt(
+            'Enter a file name for the CSV download:',
+            `${selectedTable.name}.csv`
+        );
+        if (requestedName === null) return;
+        let fileName = requestedName.trim();
+        if (!fileName) return;
+        fileName = `${fileName.replace(/\.csv$/i, '')}.csv`;
+
+        const csvValue = value => {
+            let text = value === null || value === undefined
+                ? ''
+                : Array.isArray(value) ? JSON.stringify(value) : String(value);
+            if (typeof value === 'string' && /^[\t\r ]*[=+\-@]/.test(text)) text = `'${text}`;
+            return `"${text.replace(/"/g, '""')}"`;
+        };
+        const lines = [
+            selectedTable.columns.map(csvValue).join(','),
+            ...selectedTable.rows.map(row => row.map(csvValue).join(','))
+        ];
+        const blob = new Blob(['\uFEFF', lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName;
+        document.body.append(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 0);
+    });
     const form = document.querySelector('#client-form');
     const formPane = document.querySelector('#client-form-pane');
     const addClientButton = document.querySelector('#add-client');
@@ -54,49 +260,32 @@
     let editingClientId = new URLSearchParams(location.search).get('clientId');
     const fields = ['memberId', 'koreanName', 'englishSurname', 'englishGivenName', 'englishMiddleName', 'phone1', 'phone2', 'streetAddress', 'city', 'state', 'zipCode'];
     const message = text => document.querySelector('#message').textContent = text;
-    const loadClients = () => fetch('/api/admin/clients')
-        .then(response => response.ok ? response.json() : Promise.reject())
-        .then(data => { clients = data; renderClients(); });
-    let clients = [];
-    let sortField = null;
-    let sortAscending = true;
-    const englishName = client => `${client.englishSurname}, ${client.englishGivenName}${client.englishMiddleName ? ` ${client.englishMiddleName}` : ''}`;
-    const escapeHtml = value => String(value ?? '').replace(/[&<>'\"]/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '\"': '&quot;' }[character]));
-    const displayValue = value => value === null || value === undefined ? 'null' : escapeHtml(value);
-    const renderClients = () => {
-        const sortedClients = [...clients].sort((first, second) => {
-            if (!sortField) return String(first.koreanName ?? '').localeCompare(String(second.koreanName ?? ''), undefined, { sensitivity: 'base' });
-            const firstValue = sortField === 'englishName' ? englishName(first) : first[sortField];
-            const secondValue = sortField === 'englishName' ? englishName(second) : second[sortField];
-            return String(firstValue ?? '').localeCompare(String(secondValue ?? ''), undefined, { sensitivity: 'base' }) * (sortAscending ? 1 : -1);
-        });
-        document.querySelector('#clients').innerHTML = sortedClients.map(client => {
-            return `<tr><td>${displayValue(client.memberId)}</td><td>${escapeHtml(client.koreanName)}</td><td>${escapeHtml(englishName(client))}</td><td><a href="/admin.html?clientId=${encodeURIComponent(client.id)}">View / Edit</a> <button type="button" data-delete-client="${escapeHtml(client.id)}">Delete</button></td></tr>`;
-        }).join('');
+    const refreshAdminClients = async () => {
+        if (selectedTable?.name !== 'clients') return;
+        const clientsButton = [...tableButtons].find(item => item.dataset.table === 'clients');
+        if (clientsButton) await showTable(clientsButton);
     };
-    document.querySelector('#clients').addEventListener('click', event => {
-        const button = event.target.closest('[data-delete-client]');
-        if (!button) return;
-        const clientId = button.dataset.deleteClient;
+    const deleteClient = async clientId => {
         if (!confirm('Delete this client? The record will be hidden but retained in the database.')) return;
-        fetch(`/api/admin/clients/${encodeURIComponent(clientId)}`, { method: 'DELETE' })
-            .then(async response => {
-                if (response.ok) return;
+        try {
+            const response = await fetch(`/api/admin/clients/${encodeURIComponent(clientId)}`, { method: 'DELETE' });
+            if (!response.ok) {
                 const error = await response.json().catch(() => ({}));
                 throw new Error(error.detail || error.message || 'Unable to delete client.');
-            })
-            .then(() => loadClients())
-            .then(() => message('Client deleted.'))
-            .catch(error => message(error.message));
+            }
+            await refreshAdminClients();
+            message('Client deleted.');
+            tableMessage.textContent = 'Client deleted.';
+        } catch (error) {
+            message(error.message);
+            tableMessage.textContent = error.message;
+        }
+    };
+    document.querySelector('#client-row-actions').addEventListener('click', event => {
+        const button = event.target.closest('[data-delete-client]');
+        if (!button) return;
+        deleteClient(button.dataset.deleteClient);
     });
-    document.querySelectorAll('[data-sort]').forEach(button => button.addEventListener('click', () => {
-        const nextField = button.dataset.sort;
-        sortAscending = sortField === nextField ? !sortAscending : true;
-        sortField = nextField;
-        document.querySelectorAll('[data-sort]').forEach(item => { item.textContent = item.dataset.sort === sortField ? `${item.textContent.replace(/ [▲▼]$/, '')} ${sortAscending ? '▲' : '▼'}` : item.textContent.replace(/ [▲▼]$/, ''); });
-        renderClients();
-    }));
-    loadClients().catch(() => message('Unable to load clients.'));
     addClientButton.addEventListener('click', () => {
         editingClientId = null;
         form.reset();
@@ -113,11 +302,14 @@
     if (editingClientId) {
         formPane.hidden = false;
         document.querySelector('#heading').textContent = 'Edit client';
-        fetch('/api/admin/clients').then(response => response.ok ? response.json() : Promise.reject()).then(clients => {
-            const client = clients.find(item => String(item.id) === editingClientId);
-            if (!client) throw new Error();
-            fields.forEach(field => form.elements[field].value = client[field] ?? '');
-        }).catch(() => message('Unable to load client.'));
+        fetch(`/api/admin/clients/${encodeURIComponent(editingClientId)}`)
+            .then(async response => {
+                if (response.ok) return response.json();
+                const error = await response.json().catch(() => ({}));
+                throw new Error(error.detail || error.message || 'Unable to load client.');
+            }).then(client => {
+                fields.forEach(field => form.elements[field].value = client[field] ?? '');
+            }).catch(error => message(error.message || 'Unable to load client.'));
     }
     form.addEventListener('submit', event => {
         event.preventDefault();
@@ -129,7 +321,7 @@
             .then(response => response.ok ? response.json() : response.json().then(error => Promise.reject(error)))
             .then(client => {
                 message('Client saved.');
-                return loadClients();
+                return refreshAdminClients();
             })
             .then(() => { formPane.hidden = true; })
             .catch(error => message(error.message || 'Unable to save client.'));

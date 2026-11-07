@@ -1,18 +1,22 @@
 package com.arumdaun.church;
 
+import java.io.IOException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 @RestController
@@ -29,8 +33,8 @@ public class CemeteryController {
         return Map.of("status", "UP");
     }
 
-    @GetMapping("/api/lots")
-    public List<Map<String, Object>> lots() {
+    @GetMapping("/api/admin/lots")
+    public List<Map<String, Object>> adminLots() {
         CemeterySystem system = repository.loadSystem();
         return system.getLots().values().stream()
                 .map(lot -> Map.<String, Object>of(
@@ -39,6 +43,22 @@ public class CemeteryController {
                         "sold", lot.isSold(),
                         "information", lot.getInformation()))
                 .toList();
+    }
+
+    @GetMapping("/api/admin/tables/{tableName}")
+    public PostgresRepository.AdminTableData adminTable(@PathVariable String tableName) {
+        return repository.getAdminTableData(tableName);
+    }
+
+    @PostMapping(path = "/api/admin/tables/{tableName}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public PostgresRepository.TableUploadResult uploadAdminTable(
+            @PathVariable String tableName,
+            @RequestParam("file") MultipartFile file) {
+        try {
+            return repository.upsertAdminTableCsv(tableName, file.getBytes());
+        } catch (IOException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unable to read uploaded CSV file");
+        }
     }
 
     @PostMapping("/api/admin/lots")
@@ -76,6 +96,15 @@ public class CemeteryController {
     public ClientRequest createClient(@RequestBody ClientRequest request) {
         validate(request);
         return ClientRequest.from(repository.createClient(request));
+    }
+
+    @GetMapping("/api/admin/clients/{clientId}")
+    public ClientRequest adminClient(@PathVariable UUID clientId) {
+        Client client = repository.loadSystem().getClient(clientId);
+        if (client == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Client not found");
+        }
+        return ClientRequest.from(client);
     }
 
     @PutMapping("/api/admin/clients/{clientId}")
