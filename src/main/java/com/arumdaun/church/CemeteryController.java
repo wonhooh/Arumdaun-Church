@@ -1,14 +1,20 @@
 package com.arumdaun.church;
 
 import java.io.IOException;
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
+import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.TransactionException;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -46,6 +52,17 @@ public class CemeteryController {
                 .toList();
     }
 
+    @GetMapping("/api/admin/lots/available")
+    public List<Map<String, Object>> availableLots(
+            @RequestParam(value = "clientId", required = false) UUID clientId) {
+        return repository.getAvailableLots(clientId);
+    }
+
+    @GetMapping("/api/admin/reports/individual-payment-record")
+    public List<PostgresRepository.IndividualPaymentReportLot> individualPaymentReport() {
+        return repository.getIndividualPaymentReport();
+    }
+
     @GetMapping("/api/admin/tables/{tableName}")
     public PostgresRepository.AdminTableData adminTable(@PathVariable String tableName) {
         return repository.getAdminTableData(tableName);
@@ -79,6 +96,31 @@ public class CemeteryController {
         return repository.createLot(request.lotNumber().trim(), request.price(), request.information());
     }
 
+    @PutMapping("/api/admin/lots/{lotNumber}")
+    public ResponseEntity<?> updateLot(
+            @PathVariable int lotNumber,
+            @RequestBody LotUpdateRequest request) {
+        if (request == null || request.price() == null || request.price().signum() < 0) {
+            return ResponseEntity.badRequest().body(Map.of("detail", "Price must be zero or greater"));
+        }
+        return ResponseEntity.ok(repository.updateLot(
+                lotNumber, request.price(), request.information(), request.paidInFull()));
+    }
+
+    @DeleteMapping("/api/admin/lots/{lotNumber}")
+    public ResponseEntity<?> deleteLot(@PathVariable int lotNumber) {
+        try {
+            repository.deleteLot(lotNumber);
+            return ResponseEntity.ok(Map.of("status", "deleted"));
+        } catch (ResponseStatusException exception) {
+            return transactionSaveFailure(exception);
+        } catch (DataAccessException exception) {
+            return transactionSaveFailure(exception);
+        } catch (TransactionException exception) {
+            return transactionSaveFailure(exception);
+        }
+    }
+
     @GetMapping("/api/clients")
     public List<Map<String, Object>> clients() {
         CemeterySystem system = repository.loadSystem();
@@ -100,9 +142,106 @@ public class CemeteryController {
     }
 
     @PostMapping("/api/admin/clients")
-    public ClientRequest createClient(@RequestBody ClientRequest request) {
-        validate(request);
-        return ClientRequest.from(repository.createClient(request));
+    public ResponseEntity<?> createClient(@RequestBody ClientRequest request) {
+        try {
+            validate(request);
+            return ResponseEntity.ok(ClientRequest.from(repository.createClient(request)));
+        } catch (ResponseStatusException exception) {
+            return clientSaveFailure(exception);
+        } catch (DataAccessException exception) {
+            return clientSaveFailure(exception);
+        } catch (TransactionException exception) {
+            return clientSaveFailure(exception);
+        }
+    }
+
+    @PostMapping("/api/admin/clients/with-transactions")
+    public ResponseEntity<?> createClientWithTransactions(@RequestBody ClientWithTransactionsRequest request) {
+        try {
+            if (request == null || request.client() == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Client details are required");
+            }
+            validate(request.client());
+            List<TransactionRequest> transactions = request.transactions() == null ? List.of() : request.transactions();
+            if (transactions.size() > 50) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A maximum of 50 transactions can be added at once");
+            }
+            validateTransactions(transactions);
+            return ResponseEntity.ok(ClientRequest.from(
+                    repository.createClientWithTransactions(request.client(), transactions)));
+        } catch (ResponseStatusException exception) {
+            return clientSaveFailure(exception);
+        } catch (DataAccessException exception) {
+            return clientSaveFailure(exception);
+        } catch (TransactionException exception) {
+            return clientSaveFailure(exception);
+        }
+    }
+
+    @GetMapping("/api/admin/clients/{clientId}/transactions")
+    public List<Map<String, Object>> adminClientTransactions(@PathVariable UUID clientId) {
+        return repository.getClientTransactions(clientId);
+    }
+
+    @DeleteMapping("/api/admin/clients/{clientId}/transactions/{transactionId}")
+    public ResponseEntity<?> deleteClientTransaction(
+            @PathVariable UUID clientId,
+            @PathVariable UUID transactionId) {
+        try {
+            repository.deleteClientTransaction(clientId, transactionId);
+            return ResponseEntity.ok(Map.of("status", "deleted"));
+        } catch (ResponseStatusException exception) {
+            return clientSaveFailure(exception);
+        } catch (DataAccessException exception) {
+            return clientSaveFailure(exception);
+        } catch (TransactionException exception) {
+            return clientSaveFailure(exception);
+        }
+    }
+
+    @PutMapping("/api/admin/transactions/{transactionId}")
+    public ResponseEntity<?> updateAdminTransaction(
+            @PathVariable UUID transactionId,
+            @RequestBody TransactionRequest request) {
+        try {
+            if (request == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Transaction details are required");
+            }
+            validateTransactions(List.of(request));
+            return ResponseEntity.ok(repository.updateAdminTransaction(transactionId, request));
+        } catch (ResponseStatusException exception) {
+            return transactionSaveFailure(exception);
+        } catch (DataAccessException exception) {
+            return transactionSaveFailure(exception);
+        } catch (TransactionException exception) {
+            return transactionSaveFailure(exception);
+        }
+    }
+
+    @PutMapping("/api/admin/clients/{clientId}/with-transactions")
+    public ResponseEntity<?> updateClientWithTransactions(
+            @PathVariable UUID clientId,
+            @RequestBody ClientWithTransactionsRequest request) {
+        try {
+            if (request == null || request.client() == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Client details are required");
+            }
+            validate(request.client());
+            List<TransactionRequest> transactions = request.transactions() == null ? List.of() : request.transactions();
+            if (transactions.size() > 50) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "A maximum of 50 transactions can be added at once");
+            }
+            validateTransactions(transactions);
+            return ResponseEntity.ok(ClientRequest.from(
+                    repository.updateClientWithTransactions(clientId, request.client(), transactions)));
+        } catch (ResponseStatusException exception) {
+            return clientSaveFailure(exception);
+        } catch (DataAccessException exception) {
+            return clientSaveFailure(exception);
+        } catch (TransactionException exception) {
+            return clientSaveFailure(exception);
+        }
     }
 
     @GetMapping("/api/admin/clients/{clientId}")
@@ -115,9 +254,15 @@ public class CemeteryController {
     }
 
     @PutMapping("/api/admin/clients/{clientId}")
-    public ClientRequest updateClient(@PathVariable UUID clientId, @RequestBody ClientRequest request) {
-        validate(request);
-        return ClientRequest.from(repository.updateClient(clientId, request));
+    public ResponseEntity<?> updateClient(@PathVariable UUID clientId, @RequestBody ClientRequest request) {
+        try {
+            validate(request);
+            return ResponseEntity.ok(ClientRequest.from(repository.updateClient(clientId, request)));
+        } catch (ResponseStatusException exception) {
+            return clientSaveFailure(exception);
+        } catch (DataAccessException exception) {
+            return clientSaveFailure(exception);
+        }
     }
 
     @DeleteMapping("/api/admin/clients/{clientId}")
@@ -127,13 +272,108 @@ public class CemeteryController {
     }
 
     private void validate(ClientRequest request) {
-        if (request.koreanName() == null || request.koreanName().isBlank()
-                || request.englishSurname() == null || request.englishSurname().isBlank()
-                || request.englishGivenName() == null || request.englishGivenName().isBlank()
-                || request.phone1() == null || request.phone1().isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Korean name, English name, and primary phone are required");
+        List<String> missingFields = new ArrayList<>();
+        if (request.koreanName() == null || request.koreanName().isBlank()) {
+            missingFields.add("Korean name");
         }
+        if (request.englishSurname() == null || request.englishSurname().isBlank()) {
+            missingFields.add("English surname");
+        }
+        if (request.englishGivenName() == null || request.englishGivenName().isBlank()) {
+            missingFields.add("English given name");
+        }
+        if (request.phone1() == null || request.phone1().isBlank()) {
+            missingFields.add("Phone 1");
+        }
+        if (!missingFields.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Required fields are missing: " + String.join(", ", missingFields));
+        }
+    }
+
+    private void validateTransactions(List<TransactionRequest> transactions) {
+        Set<String> validTypes = Set.of("PURCHASE", "PAYMENT", "REFUND", "CANCEL");
+        for (int index = 0; index < transactions.size(); index++) {
+            TransactionRequest transaction = transactions.get(index);
+            String prefix = "Transaction " + (index + 1) + ": ";
+            if (transaction == null || transaction.transactionType() == null
+                    || !validTypes.contains(transaction.transactionType())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        prefix + "choose Purchase, Payment, or Refund");
+            }
+            if (transaction.transactionDate() == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, prefix + "date is required");
+            }
+            BigDecimal amount = transaction.amount() == null ? BigDecimal.ZERO : transaction.amount();
+            if (amount.signum() < 0) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, prefix + "amount cannot be negative");
+            }
+            if (Set.of("PAYMENT", "REFUND").contains(transaction.transactionType()) && amount.signum() == 0) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, prefix + "amount must be greater than zero");
+            }
+            if (transaction.lotNumber() != null && transaction.lotNumber() < 1) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, prefix + "lot number must be greater than zero");
+            }
+            if (transaction.lotNumber() == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, prefix + "enter one lot number");
+            }
+        }
+    }
+
+    private ResponseEntity<Map<String, String>> clientSaveFailure(ResponseStatusException exception) {
+        String reason = exception.getReason() == null ? "Client save was rejected" : exception.getReason();
+        return ResponseEntity.status(exception.getStatusCode()).body(Map.of("detail", reason));
+    }
+
+    private ResponseEntity<Map<String, String>> clientSaveFailure(DataAccessException exception) {
+        Throwable cause = exception.getMostSpecificCause();
+        String reason = cause.getMessage();
+        if (reason == null || reason.isBlank()) {
+            reason = exception.getClass().getSimpleName();
+        }
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("detail", "Database error while saving client: " + reason));
+    }
+
+    private ResponseEntity<Map<String, String>> clientSaveFailure(TransactionException exception) {
+        Throwable cause = exception.getMostSpecificCause();
+        String reason = cause.getMessage();
+        if (reason == null || reason.isBlank()) {
+            reason = exception.getMessage();
+        }
+        if (reason == null || reason.isBlank()) {
+            reason = exception.getClass().getSimpleName();
+        }
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("detail", "Database transaction failed while saving client: " + reason));
+    }
+
+    private ResponseEntity<Map<String, String>> transactionSaveFailure(ResponseStatusException exception) {
+        String reason = exception.getReason() == null ? "Transaction save was rejected" : exception.getReason();
+        return ResponseEntity.status(exception.getStatusCode()).body(Map.of("detail", reason));
+    }
+
+    private ResponseEntity<Map<String, String>> transactionSaveFailure(DataAccessException exception) {
+        Throwable cause = exception.getMostSpecificCause();
+        String reason = cause.getMessage();
+        if (reason == null || reason.isBlank()) {
+            reason = exception.getClass().getSimpleName();
+        }
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("detail", "Database error while saving transaction: " + reason));
+    }
+
+    private ResponseEntity<Map<String, String>> transactionSaveFailure(TransactionException exception) {
+        Throwable cause = exception.getMostSpecificCause();
+        String reason = cause.getMessage();
+        if (reason == null || reason.isBlank()) {
+            reason = exception.getMessage();
+        }
+        if (reason == null || reason.isBlank()) {
+            reason = exception.getClass().getSimpleName();
+        }
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("detail", "Database transaction failed while saving transaction: " + reason));
     }
 
     public record ClientRequest(
@@ -158,6 +398,22 @@ public class CemeteryController {
         }
     }
 
+    public record ClientWithTransactionsRequest(ClientRequest client, List<TransactionRequest> transactions) {
+    }
+
+    public record TransactionRequest(
+            UUID id,
+            String transactionType,
+            Integer lotNumber,
+            BigDecimal amount,
+            LocalDate transactionDate,
+            String method,
+            String memo) {
+    }
+
     public record LotRequest(String lotNumber, double price, String information) {
+    }
+
+    public record LotUpdateRequest(BigDecimal price, String information, Boolean paidInFull) {
     }
 }

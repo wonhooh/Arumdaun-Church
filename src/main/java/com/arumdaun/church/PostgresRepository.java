@@ -340,6 +340,377 @@ public class PostgresRepository {
                 "sold", false);
     }
 
+    public Map<String, Object> updateLot(
+            int lotNumber,
+            BigDecimal price,
+            String information,
+            Boolean paidInFull) {
+        int updated = jdbcTemplate.update(
+                "UPDATE lots SET price = ?, information = ?, paid_in_full = COALESCE(?, paid_in_full) WHERE lot_number = ?",
+                price, information == null ? "" : information, paidInFull, lotNumber);
+        if (updated == 0) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Lot not found");
+        }
+        Boolean currentPaidInFull = jdbcTemplate.queryForObject(
+                "SELECT paid_in_full FROM lots WHERE lot_number = ?", Boolean.class, lotNumber);
+        return Map.of(
+                "lotNumber", lotNumber,
+                "price", price,
+                "information", information == null ? "" : information,
+                "paidInFull", currentPaidInFull);
+    }
+
+    @Transactional
+    public void deleteLot(int lotNumber) {
+        Boolean lotExists = jdbcTemplate.queryForObject(
+                "SELECT EXISTS (SELECT 1 FROM lots WHERE lot_number = ? FOR UPDATE)",
+                Boolean.class, lotNumber);
+        if (!Boolean.TRUE.equals(lotExists)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Lot not found");
+        }
+        Boolean hasTransactions = jdbcTemplate.queryForObject(
+                "SELECT EXISTS (SELECT 1 FROM transactions WHERE lot_number = ?)",
+                Boolean.class, lotNumber);
+        if (Boolean.TRUE.equals(hasTransactions)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Lot cannot be deleted while transactions reference it");
+        }
+        jdbcTemplate.update("DELETE FROM lots WHERE lot_number = ?", lotNumber);
+    }
+
+    public List<Map<String, Object>> getAvailableLots(UUID clientId) {
+        return jdbcTemplate.query("""
+                SELECT lot_number, price
+                FROM lots l
+                WHERE (l.client_id IS NULL OR l.client_id = ?)
+                ORDER BY lot_number
+                """, (rs, rowNum) -> Map.of(
+                "lotNumber", rs.getInt("lot_number"),
+                "price", rs.getBigDecimal("price")), clientId);
+    }
+
+    public List<IndividualPaymentReportLot> getIndividualPaymentReport() {
+        List<ReportLot> lots = jdbcTemplate.query("""
+                SELECT l.lot_number, l.price, l.paid_in_full,
+                       c.korean_name, c.surname, c.given_name, c.middle_name
+                FROM lots l
+                JOIN clients c ON c.id = l.client_id
+                ORDER BY l.lot_number
+                """, (rs, rowNum) -> {
+            String koreanName = rs.getString("korean_name");
+            String englishName = java.util.stream.Stream.of(
+                    rs.getString("given_name"), rs.getString("middle_name"), rs.getString("surname"))
+                    .filter(name -> name != null && !name.isBlank())
+                    .collect(java.util.stream.Collectors.joining(" "));
+            String name = java.util.stream.Stream.of(koreanName, englishName)
+                    .filter(value -> value != null && !value.isBlank())
+                    .collect(java.util.stream.Collectors.joining(" / "));
+            return new ReportLot(
+                    rs.getInt("lot_number"),
+                    rs.getBigDecimal("price"),
+                    rs.getBoolean("paid_in_full"),
+                    name);
+        });
+
+        Map<Integer, List<ReportTransaction>> transactionsByLot = new LinkedHashMap<>();
+        jdbcTemplate.query("""
+                SELECT lot_number, transaction_type, amount, method, transaction_date, memo
+                FROM transactions
+                ORDER BY lot_number, transaction_date, id
+                """, rs -> {
+            int lotNumber = rs.getInt("lot_number");
+            transactionsByLot.computeIfAbsent(lotNumber, ignored -> new ArrayList<>()).add(
+                    new ReportTransaction(
+                            rs.getString("transaction_type"),
+                            rs.getBigDecimal("amount"),
+                            rs.getString("method"),
+                            rs.getDate("transaction_date").toLocalDate(),
+                            rs.getString("memo")));
+        });
+
+        return lots.stream().map(lot -> {
+            List<ReportTransaction> payments = new ArrayList<>();
+            List<String> remarks = new ArrayList<>();
+            for (ReportTransaction transaction : transactionsByLot.getOrDefault(lot.lotNumber(), List.of())) {
+                String type = transaction.type();
+                if ("PURCHASE".equals(type) || "PAYMENT".equals(type)) {
+                    if (payments.size() < 4) {
+                        payments.add(transaction);
+                        if (transaction.memo() != null && !transaction.memo().isBlank()) {
+                            remarks.add(transaction.memo().trim());
+                        }
+                    } else {
+                        remarks.add(formatReportTransaction("Additional " + type, transaction));
+                    }
+                } else {
+                    remarks.add(formatReportTransaction(type, transaction));
+                }
+            }
+            if (lot.paidInFull()) {
+                remarks.add("Paid in full");
+            }
+            return new IndividualPaymentReportLot(
+                    lot.lotNumber(), lot.name(), lot.price(), payments, String.join("; ", remarks));
+        }).toList();
+    }
+
+    private static String formatReportTransaction(String type, ReportTransaction transaction) {
+        String amount = transaction.amount() == null ? "" : " " + transaction.amount().toPlainString();
+        String method = transaction.method() == null || transaction.method().isBlank()
+                ? "" : " (" + transaction.method().trim() + ")";
+        String memo = transaction.memo() == null || transaction.memo().isBlank()
+                ? "" : " - " + transaction.memo().trim();
+        return type + ": " + transaction.date() + amount + method + memo;
+    }
+
+    public record IndividualPaymentReportLot(
+            int lotNumber,
+            String name,
+            BigDecimal price,
+            List<ReportTransaction> payments,
+            String remarks) {
+    }
+
+    public record ReportTransaction(
+            String type,
+            BigDecimal amount,
+            String method,
+            LocalDate date,
+            String memo) {
+    }
+
+    private record ReportLot(int lotNumber, BigDecimal price, boolean paidInFull, String name) {
+    }
+
+    public List<Map<String, Object>> getClientTransactions(UUID clientId) {
+        return jdbcTemplate.query("""
+                SELECT t.id, t.transaction_type, t.lot_number, t.amount, t.method, t.transaction_date, t.memo
+                FROM transactions t
+                JOIN lots l ON l.lot_number = t.lot_number
+                WHERE t.client_id = ?
+                ORDER BY t.transaction_date, t.id
+                """, (rs, rowNum) -> {
+            String type = rs.getString("transaction_type");
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("id", rs.getObject("id", UUID.class));
+            row.put("transactionType", type);
+            row.put("lotNumber", rs.getInt("lot_number"));
+            row.put("amount", rs.getBigDecimal("amount"));
+            row.put("transactionDate", rs.getDate("transaction_date").toLocalDate());
+            row.put("method", rs.getString("method") == null ? "" : rs.getString("method"));
+            row.put("memo", rs.getString("memo") == null ? "" : rs.getString("memo"));
+            return row;
+        }, clientId);
+    }
+
+    @Transactional
+    public void deleteClientTransaction(UUID clientId, UUID transactionId) {
+        Integer lotNumber = jdbcTemplate.query("""
+                SELECT lot_number
+                FROM transactions
+                WHERE id = ? AND client_id = ?
+                FOR UPDATE
+                """, rs -> rs.next() ? rs.getInt("lot_number") : null, transactionId, clientId);
+        if (lotNumber == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    "Transaction not found for this client");
+        }
+
+        int deleted = jdbcTemplate.update(
+                "DELETE FROM transactions WHERE id = ? AND client_id = ?", transactionId, clientId);
+        if (deleted != 1) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Transaction changed before it could be removed; reload and try again");
+        }
+        updateLotOwnership(lotNumber);
+    }
+
+    @Transactional
+    public Map<String, Object> updateAdminTransaction(
+            UUID transactionId,
+            CemeteryController.TransactionRequest transaction) {
+        UUID clientId = jdbcTemplate.query("""
+                SELECT client_id FROM transactions WHERE id = ? FOR UPDATE
+                """, rs -> rs.next() ? rs.getObject("client_id", UUID.class) : null, transactionId);
+        if (clientId == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Transaction not found or has no client");
+        }
+        CemeteryController.TransactionRequest transactionWithId = new CemeteryController.TransactionRequest(
+                transactionId,
+                transaction.transactionType(),
+                transaction.lotNumber(),
+                transaction.amount(),
+                transaction.transactionDate(),
+                transaction.method(),
+                transaction.memo());
+        saveTransactions(clientId, List.of(transactionWithId));
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("id", transactionId);
+        result.put("clientId", clientId);
+        result.put("transactionType", transaction.transactionType());
+        result.put("lotNumber", transaction.lotNumber());
+        result.put("amount", "CANCEL".equals(transaction.transactionType())
+                ? BigDecimal.ZERO : transaction.amount());
+        result.put("method", transaction.method());
+        result.put("transactionDate", transaction.transactionDate());
+        result.put("memo", transaction.memo() == null ? "" : transaction.memo());
+        return result;
+    }
+
+    @Transactional
+    public Client createClientWithTransactions(
+            CemeteryController.ClientRequest request,
+            List<CemeteryController.TransactionRequest> transactions) {
+        Client client = createClient(request);
+        saveTransactions(client.getId(), transactions);
+        return client;
+    }
+
+    @Transactional
+    public Client updateClientWithTransactions(
+            UUID clientId,
+            CemeteryController.ClientRequest request,
+            List<CemeteryController.TransactionRequest> transactions) {
+        Client client = updateClient(clientId, request);
+        saveTransactions(clientId, transactions);
+        return client;
+    }
+
+    private void saveTransactions(
+            UUID clientId,
+            List<CemeteryController.TransactionRequest> transactions) {
+        Set<Integer> assignedLots = new HashSet<>();
+
+        for (int index = 0; index < transactions.size(); index++) {
+            CemeteryController.TransactionRequest transaction = transactions.get(index);
+            Integer lotNumber = transaction.lotNumber();
+            BigDecimal lotPrice = jdbcTemplate.query("""
+                    SELECT price FROM lots WHERE lot_number = ? FOR UPDATE
+                    """, rs -> rs.next() ? rs.getBigDecimal("price") : null, lotNumber);
+            if (lotPrice == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Transaction " + (index + 1) + ": lot " + lotNumber + " does not exist");
+            }
+            UUID existingClientId = jdbcTemplate.queryForObject(
+                    "SELECT client_id FROM lots WHERE lot_number = ?", UUID.class, lotNumber);
+            if (transaction.id() == null) {
+                if ("PURCHASE".equals(transaction.transactionType())) {
+                    if (assignedLots.contains(lotNumber)
+                            || (existingClientId != null && !existingClientId.equals(clientId))) {
+                        throw new ResponseStatusException(HttpStatus.CONFLICT,
+                                "Transaction " + (index + 1) + ": lot " + lotNumber + " is already assigned");
+                    }
+                    assignedLots.add(lotNumber);
+                } else if ("CANCEL".equals(transaction.transactionType())) {
+                    requireActivePurchase(clientId, lotNumber, null, index);
+                } else if (existingClientId != null && !existingClientId.equals(clientId)) {
+                    throw new ResponseStatusException(HttpStatus.CONFLICT,
+                            "Transaction " + (index + 1) + ": lot " + lotNumber + " belongs to another client");
+                }
+
+                insertTransaction(clientId, transaction, lotNumber,
+                        "CANCEL".equals(transaction.transactionType()) ? BigDecimal.ZERO
+                                : transaction.amount() == null ? BigDecimal.ZERO : transaction.amount());
+                if ("PURCHASE".equals(transaction.transactionType())) {
+                    jdbcTemplate.update("UPDATE lots SET client_id = ? WHERE lot_number = ?", clientId, lotNumber);
+                } else if ("CANCEL".equals(transaction.transactionType())) {
+                    jdbcTemplate.update("UPDATE lots SET client_id = NULL WHERE lot_number = ?", lotNumber);
+                }
+                continue;
+            }
+
+            Integer previousLotNumber = jdbcTemplate.query("""
+                    SELECT lot_number FROM transactions WHERE id = ? AND client_id = ? FOR UPDATE
+                    """, rs -> rs.next() ? rs.getInt("lot_number") : null, transaction.id(), clientId);
+            if (previousLotNumber == null) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Transaction " + (index + 1) + " was not found for this client");
+            }
+            if ("CANCEL".equals(transaction.transactionType())) {
+                requireActivePurchase(clientId, lotNumber, transaction.id(), index);
+            } else if ("PURCHASE".equals(transaction.transactionType())
+                    && existingClientId != null && !existingClientId.equals(clientId)) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "Transaction " + (index + 1) + ": lot " + lotNumber + " belongs to another client");
+            } else if (!Set.of("PURCHASE", "CANCEL").contains(transaction.transactionType())
+                    && existingClientId != null && !existingClientId.equals(clientId)) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "Transaction " + (index + 1) + ": lot " + lotNumber + " belongs to another client");
+            }
+            jdbcTemplate.update("""
+                    UPDATE transactions
+                    SET transaction_type = ?, lot_number = ?, amount = ?, method = ?, transaction_date = ?, memo = ?
+                    WHERE id = ? AND client_id = ?
+                    """, transaction.transactionType(), lotNumber,
+                    "CANCEL".equals(transaction.transactionType()) || transaction.amount() == null
+                            ? BigDecimal.ZERO : transaction.amount(),
+                    transaction.method(), Date.valueOf(transaction.transactionDate()),
+                    transaction.memo() == null ? "" : transaction.memo(), transaction.id(), clientId);
+            updateLotOwnership(previousLotNumber);
+            if (!previousLotNumber.equals(lotNumber)) {
+                updateLotOwnership(lotNumber);
+            }
+        }
+    }
+
+    private void requireActivePurchase(UUID clientId, int lotNumber, UUID excludedTransactionId, int rowIndex) {
+        Boolean hasPurchase = jdbcTemplate.queryForObject("""
+                SELECT EXISTS (
+                    SELECT 1 FROM transactions purchase
+                    WHERE purchase.client_id = ?
+                      AND purchase.lot_number = ?
+                      AND purchase.transaction_type = 'PURCHASE'
+                      AND NOT EXISTS (
+                          SELECT 1 FROM transactions cancellation
+                          WHERE cancellation.client_id = purchase.client_id
+                            AND cancellation.lot_number = purchase.lot_number
+                            AND cancellation.transaction_type = 'CANCEL'
+                            AND (? IS NULL OR cancellation.id <> ?)
+                            AND cancellation.transaction_date >= purchase.transaction_date
+                      )
+                )
+                """, Boolean.class, clientId, lotNumber, excludedTransactionId, excludedTransactionId);
+        if (!Boolean.TRUE.equals(hasPurchase)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Transaction " + (rowIndex + 1) + ": no active purchase exists for lot " + lotNumber);
+        }
+    }
+
+    private void updateLotOwnership(int lotNumber) {
+        List<Map<String, Object>> latestOwnership = jdbcTemplate.query("""
+                SELECT transaction_type, client_id
+                FROM transactions
+                WHERE lot_number = ? AND transaction_type IN ('PURCHASE', 'CANCEL')
+                ORDER BY transaction_date DESC,
+                         CASE WHEN transaction_type = 'CANCEL' THEN 1 ELSE 0 END DESC,
+                         id DESC
+                LIMIT 1
+                """, (rs, rowNum) -> {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("type", rs.getString("transaction_type"));
+            row.put("clientId", rs.getObject("client_id", UUID.class));
+            return row;
+        }, lotNumber);
+        UUID clientId = !latestOwnership.isEmpty() && "PURCHASE".equals(latestOwnership.getFirst().get("type"))
+                ? (UUID) latestOwnership.getFirst().get("clientId")
+                : null;
+        jdbcTemplate.update("UPDATE lots SET client_id = ? WHERE lot_number = ?", clientId, lotNumber);
+    }
+
+    private void insertTransaction(
+            UUID clientId,
+            CemeteryController.TransactionRequest transaction,
+            Integer lotNumber,
+            BigDecimal amount) {
+        jdbcTemplate.update("""
+                INSERT INTO transactions (
+                    client_id, transaction_type, lot_number, amount, method, transaction_date, memo)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, clientId, transaction.transactionType(), lotNumber, amount,
+                transaction.method(), Date.valueOf(transaction.transactionDate()),
+                transaction.memo() == null ? "" : transaction.memo());
+    }
+
     public Client createClient(CemeteryController.ClientRequest request) {
         UUID id = UUID.randomUUID();
         String memberId = request.memberId() == null ? "" : String.valueOf(request.memberId());
@@ -357,7 +728,7 @@ public class PostgresRepository {
                 """, id, memberId, request.koreanName(), request.englishSurname(),
                 request.englishGivenName(), middleName, request.phone1(), phone2,
                 streetAddress, "", city, state, zipCode);
-        return loadSystem().getClients().get(id);
+        return clientFromRequest(id, request);
     }
 
     public Client updateClient(UUID clientId, CemeteryController.ClientRequest request) {
@@ -379,7 +750,24 @@ public class PostgresRepository {
         if (updated == 0) {
             throw new IllegalArgumentException("Client not found: " + clientId);
         }
-        return loadSystem().getClients().get(clientId);
+        return clientFromRequest(clientId, request);
+    }
+
+    private Client clientFromRequest(UUID id, CemeteryController.ClientRequest request) {
+        Client client = new Client(
+                id,
+                request.koreanName(),
+                request.englishSurname(),
+                request.englishGivenName(),
+                request.englishMiddleName(),
+                request.phone1(),
+                request.phone2(),
+                request.streetAddress(),
+                request.city(),
+                request.state(),
+                request.zipCode());
+        client.setMemberId(request.memberId());
+        return client;
     }
 
     public void softDeleteClient(UUID clientId) {
@@ -432,7 +820,7 @@ public class PostgresRepository {
         });
 
         jdbcTemplate.query("""
-                SELECT id, lot_number, price, information, client_id
+                SELECT lot_number, price, information, client_id
                 FROM lots ORDER BY lot_number
                     """, rs -> {
             CemeterySystem.CemeteryLot lot = new CemeterySystem.CemeteryLot(
@@ -445,62 +833,73 @@ public class PostgresRepository {
         });
 
         List<Purchase> purchases = new ArrayList<>();
+        Map<Integer, Purchase> purchasesByLot = new LinkedHashMap<>();
         jdbcTemplate.query("""
-                SELECT id, client_id, lot_numbers, total_price, amount_paid,
-                       refund_amount, transaction_date, cancellation_date, cancelled
-                FROM transactions
-                WHERE transaction_type = 'PURCHASE'
-                ORDER BY transaction_date, id
+                SELECT t.id, t.client_id, t.lot_number, t.amount, t.transaction_date
+                FROM transactions t
+                WHERE t.transaction_type = 'PURCHASE'
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM transactions cancellation
+                      WHERE cancellation.client_id = t.client_id
+                        AND cancellation.lot_number = t.lot_number
+                        AND cancellation.transaction_type = 'CANCEL'
+                        AND cancellation.transaction_date >= t.transaction_date
+                  )
+                ORDER BY t.transaction_date, t.id
                 """, rs -> {
             UUID purchaseId = rs.getObject("id", UUID.class);
             UUID clientId = rs.getObject("client_id", UUID.class);
-            List<CemeterySystem.CemeteryLot> purchaseLots = new ArrayList<>();
-            String[] lotNumbers = (String[]) rs.getArray("lot_numbers").getArray();
-            for (String lotNumber : lotNumbers) {
-                CemeterySystem.CemeteryLot lot = lots.get(lotNumber);
-                if (lot != null) {
-                    purchaseLots.add(lot);
-                }
+            int lotNumber = rs.getInt("lot_number");
+            CemeterySystem.CemeteryLot lot = lots.get(String.valueOf(lotNumber));
+            if (lot == null) {
+                return;
             }
             Purchase purchase = new Purchase(
                     purchaseId,
                     clientId,
-                    purchaseLots,
-                    rs.getDouble("total_price"),
-                    rs.getDouble("amount_paid"),
+                    List.of(lot),
+                    lot.getPrice(),
+                    rs.getDouble("amount"),
                     rs.getDate("transaction_date").toLocalDate());
-            purchase.setCancelled(rs.getBoolean("cancelled"));
-            purchase.setRefundAmount(rs.getDouble("refund_amount"));
-            Date cancellationDate = rs.getDate("cancellation_date");
-            if (cancellationDate != null) {
-                purchase.setCancellationDate(cancellationDate.toLocalDate());
-            }
             purchases.add(purchase);
+            purchasesByLot.put(lotNumber, purchase);
         });
 
         List<Payment> payments = jdbcTemplate.query("""
-                SELECT id, client_id, amount, method, transaction_date,
-                       transaction_type, check_number, lot_numbers, refund_amount
+                SELECT id, client_id, lot_number, amount, method, transaction_date, transaction_type
                 FROM transactions
                 WHERE transaction_type IN ('PAYMENT', 'REFUND')
                 ORDER BY transaction_date, id
-                    """, (rs, rowNum) -> new Payment(
-                rs.getObject("id", UUID.class),
-                rs.getObject("client_id", UUID.class),
-                "REFUND".equalsIgnoreCase(rs.getString("transaction_type"))
-                        ? rs.getDouble("refund_amount")
-                        : rs.getDouble("amount"),
-                rs.getString("method"),
-                rs.getDate("transaction_date").toLocalDate(),
-                rs.getString("transaction_type"),
-                rs.getString("check_number"),
-                String.join(", ", (String[]) rs.getArray("lot_numbers").getArray())));
+                """, (rs, rowNum) -> {
+            UUID clientId = rs.getObject("client_id", UUID.class);
+            int lotNumber = rs.getInt("lot_number");
+            String type = rs.getString("transaction_type");
+            double amount = rs.getDouble("amount");
+            Purchase purchase = purchasesByLot.get(lotNumber);
+            if (purchase != null && clientId != null && clientId.equals(purchase.getClientId())) {
+                if ("PAYMENT".equals(type)) {
+                    purchase.addPayment(amount);
+                } else {
+                    purchase.setRefundAmount(purchase.getRefundAmount() + amount);
+                    purchase.setAmountPaid(Math.max(0, purchase.getAmountPaid() - amount));
+                }
+            }
+            return new Payment(
+                    rs.getObject("id", UUID.class),
+                    clientId,
+                    amount,
+                    rs.getString("method"),
+                    rs.getDate("transaction_date").toLocalDate(),
+                    type,
+                    null,
+                    String.valueOf(lotNumber));
+        });
 
         system.setClients(clients);
         system.setLots(lots);
         system.setPurchases(purchases);
         system.setPayments(payments);
-        system.reconcileLotOwnership();
         return system;
     }
 }

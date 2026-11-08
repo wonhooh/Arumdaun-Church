@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Client Management | Arumdaun Church Cemetery</title>
+    <style>
+        :root { font-family: system-ui, sans-serif; color: #17202a; background: #f3f6f8; }
+        body { margin: 0; }
+        main { max-width: 1200px; margin: 0 auto; padding: 36px 24px; }
+        nav, .toolbar, .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+        nav { margin-bottom: 24px; }
+        .toolbar { justify-content: space-between; }
+        button, .button {
+            padding: 9px 14px; border: 0; border-radius: 6px; background: #176b45;
+            color: white; text-decoration: none; font: inherit; cursor: pointer;
+        }
+        button:disabled { opacity: .6; cursor: wait; }
+        .table-scroll { overflow: auto; max-height: 440px; margin: 16px 0 28px; background: white; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 10px 12px; border-bottom: 1px solid #d9e1e6; text-align: left; }
+        th { position: sticky; top: 0; z-index: 1; background: #e8eef2; }
+        td.actions-cell { display: flex; gap: 8px; white-space: nowrap; }
+        td.actions-cell button { padding: 7px 10px; }
+        form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; padding: 24px; background: white; }
+        label { display: grid; min-width: 0; gap: 6px; font-weight: 700; }
+        input, select { box-sizing: border-box; width: 100%; min-width: 0; padding: 9px; border: 1px solid #b9c5cc; border-radius: 4px; font: inherit; }
+        .field-row { grid-column: 1 / -1; overflow-x: auto; }
+        .field-row-grid { display: grid; min-width: 760px; gap: 14px; }
+        .field-row.names .field-row-grid, .field-row.address .field-row-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+        .field-row.phones .field-row-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .wide { grid-column: 1 / -1; }
+        #transactions { display: grid; gap: 10px; overflow-x: auto; }
+        .transaction-entry {
+            display: grid;
+            grid-template-columns: minmax(115px, 1fr) minmax(120px, 1fr) minmax(135px, 1fr)
+                minmax(130px, 1fr) minmax(120px, 1fr) minmax(160px, 1.2fr) auto;
+            gap: 8px; align-items: end; min-width: 1050px; padding: 12px; border: 1px solid #d9e1e6;
+        }
+        .transaction-entry label { font-size: .9rem; }
+        .transaction-entry input, .transaction-entry select { font-size: .9rem; }
+        .transaction-section { margin-top: 20px; padding-top: 16px; border-top: 1px solid #d9e1e6; }
+        #message, #list-message { min-height: 1.4em; font-weight: 700; }
+        @media (max-width: 650px) {
+            main { padding: 20px 14px; }
+            form { grid-template-columns: 1fr; padding: 16px; }
+            .wide, .field-row { grid-column: 1; }
+        }
+    </style>
+</head>
+<body>
+<main>
+    <nav aria-label="Administration navigation">
+        <a class="button" href="/">Home</a>
+        <a class="button" href="/admin.html">Database tables</a>
+    </nav>
+    <section aria-labelledby="clients-heading">
+        <div class="toolbar">
+            <h1 id="clients-heading">Clients</h1>
+            <button id="add-client" type="button">Add new client</button>
+        </div>
+        <p id="list-message" role="status" aria-live="polite"></p>
+        <div class="table-scroll">
+            <table>
+                <thead>
+                    <tr><th>Actions</th><th>Member ID</th><th>Name</th><th>Phone 1</th></tr>
+                </thead>
+                <tbody id="client-rows"></tbody>
+            </table>
+        </div>
+    </section>
+    <section id="client-editor" hidden aria-labelledby="client-editor-heading">
+        <h2 id="client-editor-heading">Add client</h2>
+        <p id="message" role="status" aria-live="polite"></p>
+        <form id="client-form">
+            <label>Member ID <input name="memberId" type="number"></label>
+            <div class="field-row names" role="group" aria-label="Client names">
+                <div class="field-row-grid">
+                    <label>Korean name <input name="koreanName" required></label>
+                    <label>English surname <input name="englishSurname" required></label>
+                    <label>English given name <input name="englishGivenName" required></label>
+                    <label>English middle name <input name="englishMiddleName"></label>
+                </div>
+            </div>
+            <div class="field-row phones" role="group" aria-label="Client phone numbers">
+                <div class="field-row-grid">
+                    <label>Phone 1 <input name="phone1" required></label>
+                    <label>Phone 2 <input name="phone2"></label>
+                </div>
+            </div>
+            <div class="field-row address" role="group" aria-label="Client address">
+                <div class="field-row-grid">
+                    <label>Street address <input name="streetAddress"></label>
+                    <label>City <input name="city"></label>
+                    <label>State <input name="state"></label>
+                    <label>ZIP code <input name="zipCode"></label>
+                </div>
+            </div>
+            <section class="transaction-section wide" aria-labelledby="transactions-heading">
+                <h3 id="transactions-heading">Transactions for this client</h3>
+                <p id="transaction-help">Optional: add transactions now, one lot per row.</p>
+                <div id="existing-transactions"></div>
+                <div id="transactions"></div>
+                <button id="add-transaction" type="button">Add transaction</button>
+            </section>
+            <div class="wide actions">
+                <button type="submit">Save client</button>
+                <button id="cancel-client" type="button">Cancel</button>
+            </div>
+        </form>
+    </section>
+</main>
+<script>
+    const clientRows = document.querySelector('#client-rows');
+    const listMessage = document.querySelector('#list-message');
+    const editor = document.querySelector('#client-editor');
+    const form = document.querySelector('#client-form');
+    const transactionList = document.querySelector('#transactions');
+    const existingTransactions = document.querySelector('#existing-transactions');
+    const fields = [
+        'memberId', 'koreanName', 'englishSurname', 'englishGivenName', 'englishMiddleName',
+        'phone1', 'phone2', 'streetAddress', 'city', 'state', 'zipCode'
+    ];
+    const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, character => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[character]));
+    const money = value => new Intl.NumberFormat('en-US', {
+        style: 'currency', currency: 'USD'
+    }).format(Number(value ?? 0));
+    const message = value => document.querySelector('#message').textContent = value;
+    let editingClientId = null;
+    let transactionsForClient = [];
+    let availableLots = [];
+
+    const readResponse = async (response, fallback) => {
+        const text = await response.text();
+        let result = {};
+        if (text) {
+            try {
+                result = JSON.parse(text);
+            } catch {
+                result.detail = text.trim().slice(0, 400);
+            }
+        }
+        if (!response.ok) throw new Error(result.detail || result.message || fallback);
+        return result;
+    };
+
+    const loadClients = async () => {
+        listMessage.textContent = 'Loading clients...';
+        try {
+            const clients = await readResponse(
+                await fetch('/api/admin/clients', { cache: 'no-store' }),
+                'Unable to load clients.');
+            clientRows.innerHTML = clients.length ? clients.map(client => {
+                const name = [
+                    client.koreanName,
+                    [client.englishGivenName, client.englishMiddleName, client.englishSurname]
+                        .filter(Boolean).join(' ')
+                ].filter(Boolean).join(' / ');
+                return `<tr>
+                    <td class="actions-cell">
+                        <button type="button" data-edit-client="${escapeHtml(client.id)}">View / Edit</button>
+                        <button type="button" data-delete-client="${escapeHtml(client.id)}">Delete</button>
+                    </td>
+                    <td>${escapeHtml(client.memberId)}</td>
+                    <td>${escapeHtml(name)}</td>
+                    <td>${escapeHtml(client.phone1)}</td>
+                </tr>`;
+            }).join('') : '<tr><td colspan="4">No active clients found.</td></tr>';
+            listMessage.textContent = `${clients.length} client${clients.length === 1 ? '' : 's'} loaded.`;
+        } catch (error) {
+            clientRows.replaceChildren();
+            listMessage.textContent = error.message || 'Unable to load clients.';
+        }
+    };
+
+    const renderTransactions = transactions => {
+        transactionsForClient = transactions;
+        const formatter = new Intl.DateTimeFormat('en-US', { style: 'currency', currency: 'USD' });
+        existingTransactions.innerHTML = transactions.length
+            ? `<h4>Existing transactions</h4><div class="table-scroll"><table>
+                <thead><tr><th>Type</th><th>Date</th><th>Lot</th><th>Amount</th><th>Method</th><th>Memo</th><th>Action</th></tr></thead>
+                <tbody>${transactions.map(transaction => `<tr>
+                    <td>${escapeHtml(transaction.transactionType)}</td>
+                    <td>${escapeHtml(transaction.transactionDate)}</td>
+                    <td>${escapeHtml(transaction.lotNumber)}</td>
+                    <td>${formatter.format(Number(transaction.amount))}</td>
+                    <td>${escapeHtml(transaction.method)}</td>
+                    <td>${escapeHtml(transaction.memo)}</td>
+                    <td><button type="button" data-edit-transaction="${escapeHtml(transaction.id)}">View / Edit</button></td>
+                </tr>`).join('')}</tbody></table></div>`
+            : '<p>No transactions recorded.</p>';
+    };
+
+    const addTransactionRow = transaction => {
+        const row = document.createElement('div');
+        row.className = 'transaction-entry';
+        if (transaction?.id) row.dataset.transactionId = transaction.id;
+        const today = new Date();
+        const localDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+        const options = availableLots.map(lot =>
+            `<option value="${escapeHtml(lot.lotNumber)}">Lot ${escapeHtml(lot.lotNumber)} — ${money(lot.price)}</option>`
+        ).join('');
+        row.innerHTML = `
+            <label>Type
+                <select name="transactionType">
+                    <option value="PURCHASE">Purchase</option><option value="PAYMENT">Payment</option>
+                    <option value="REFUND">Refund</option><option value="CANCEL">Cancel</option>
+                </select>
+            </label>
+            <label>Lot number
+                <select name="lotNumber" required>
+                    <option value="">${availableLots.length ? 'Select lot' : 'No lots available'}</option>${options}
+                </select>
+            </label>
+            <label>Date <input name="transactionDate" type="date" required value="${localDate}"></label>
+            <label class="amount-label">Initial paid <input name="amount" type="number" min="0" step="1" value="0" required></label>
+            <label>Method <input name="method" placeholder="Cash, check, card"></label>
+            <label>Memo <input name="memo" maxlength="2000"></label>
+            ${transaction?.id ? '' : '<button type="button" data-remove-transaction>Remove</button>'}`;
+        transactionList.append(row);
+        if (transaction) {
+            for (const field of ['transactionType', 'transactionDate', 'lotNumber', 'amount', 'method', 'memo']) {
+                row.querySelector(`[name="${field}"]`).value = transaction[field] ?? '';
+            }
+            row.querySelector('[name="amount"]').value = transaction.amount ?? '0';
+        }
+        const updateAmount = () => {
+            const type = row.querySelector('[name="transactionType"]').value;
+            const amount = row.querySelector('[name="amount"]');
+            row.querySelector('.amount-label').firstChild.textContent = type === 'PURCHASE'
+                ? 'Initial paid ' : type === 'CANCEL' ? 'No amount ' : `${type === 'REFUND' ? 'Refund' : 'Payment'} amount `;
+            amount.step = type === 'PURCHASE' ? '1' : '0.01';
+            amount.min = type === 'CANCEL' || type === 'PURCHASE' ? '0' : '0.01';
+            amount.disabled = type === 'CANCEL';
+            amount.required = type !== 'CANCEL';
+            if (type === 'CANCEL') amount.value = '0';
+        };
+        row.querySelector('[name="transactionType"]').addEventListener('change', updateAmount);
+        row.querySelector('[data-remove-transaction]')?.addEventListener('click', () => row.remove());
+        updateAmount();
+    };
+
+    const openEditor = async clientId => {
+        editingClientId = clientId;
+        form.reset();
+        transactionList.replaceChildren();
+        existingTransactions.replaceChildren();
+        transactionsForClient = [];
+        message('Loading client...');
+        editor.hidden = false;
+        document.querySelector('#client-editor-heading').textContent = clientId ? 'Edit client' : 'Add client';
+        document.querySelector('#transaction-help').textContent = clientId
+            ? 'Use View / Edit to load an existing transaction below, or add additional transaction rows.'
+            : 'Optional: add transactions now, one lot per row.';
+        try {
+            const query = clientId ? `?clientId=${encodeURIComponent(clientId)}` : '';
+            const requests = [
+                fetch(`/api/admin/lots/available${query}`, { cache: 'no-store' })
+            ];
+            if (clientId) {
+                requests.push(fetch(`/api/admin/clients/${encodeURIComponent(clientId)}`));
+                requests.push(fetch(`/api/admin/clients/${encodeURIComponent(clientId)}/transactions`));
+            }
+            const responses = await Promise.all(requests);
+            availableLots = await readResponse(responses[0], 'Unable to load available lots.');
+            if (clientId) {
+                const [client, transactions] = await Promise.all([
+                    readResponse(responses[1], 'Unable to load client.'),
+                    readResponse(responses[2], 'Unable to load transactions.')
+                ]);
+                fields.forEach(field => form.elements[field].value = client[field] ?? '');
+                renderTransactions(transactions);
+            }
+            message('');
+            form.elements.koreanName.focus();
+            editor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } catch (error) {
+            message(error.message || 'Unable to load client.');
+        }
+    };
+
+    clientRows.addEventListener('click', async event => {
+        const editButton = event.target.closest('[data-edit-client]');
+        if (editButton) {
+            await openEditor(editButton.dataset.editClient);
+            return;
+        }
+        const deleteButton = event.target.closest('[data-delete-client]');
+        if (!deleteButton || !confirm('Delete this client? The record will be hidden but retained in the database.')) return;
+        deleteButton.disabled = true;
+        try {
+            await readResponse(await fetch(`/api/admin/clients/${encodeURIComponent(deleteButton.dataset.deleteClient)}`, {
+                method: 'DELETE'
+            }), 'Unable to delete client.');
+            if (editingClientId === deleteButton.dataset.deleteClient) editor.hidden = true;
+            await loadClients();
+            listMessage.textContent = 'Client deleted.';
+        } catch (error) {
+            deleteButton.disabled = false;
+            listMessage.textContent = error.message || 'Unable to delete client.';
+        }
+    });
+
+    existingTransactions.addEventListener('click', event => {
+        const button = event.target.closest('[data-edit-transaction]');
+        if (!button) return;
+        const transaction = transactionsForClient.find(item => item.id === button.dataset.editTransaction);
+        if (!transaction) return;
+        const existingRow = transactionList.querySelector(
+            `[data-transaction-id="${CSS.escape(transaction.id)}"]`);
+        if (existingRow) {
+            existingRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            return;
+        }
+        addTransactionRow(transaction);
+        transactionList.lastElementChild.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+
+    document.querySelector('#add-client').addEventListener('click', () => openEditor(null));
+    document.querySelector('#cancel-client').addEventListener('click', () => {
+        editor.hidden = true;
+        form.reset();
+        transactionList.replaceChildren();
+        message('');
+    });
+    document.querySelector('#add-transaction').addEventListener('click', async event => {
+        const button = event.currentTarget;
+        button.disabled = true;
+        try {
+            if (!availableLots.length) {
+                const query = editingClientId ? `?clientId=${encodeURIComponent(editingClientId)}` : '';
+                availableLots = await readResponse(
+                    await fetch(`/api/admin/lots/available${query}`),
+                    'Unable to load available lots.');
+            }
+            addTransactionRow();
+        } catch (error) {
+            message(error.message || 'Unable to load available lots.');
+        } finally {
+            button.disabled = false;
+        }
+    });
+
+    form.addEventListener('submit', async event => {
+        event.preventDefault();
+        const saveButton = form.querySelector('[type="submit"]');
+        saveButton.disabled = true;
+        message('Saving client...');
+        const client = Object.fromEntries(fields.map(field => [field, form.elements[field].value.trim()]));
+        client.memberId = client.memberId === '' ? null : Number(client.memberId);
+        const transactions = [...transactionList.querySelectorAll('.transaction-entry')].map(row => ({
+            id: row.dataset.transactionId || null,
+            transactionType: row.querySelector('[name="transactionType"]').value,
+            transactionDate: row.querySelector('[name="transactionDate"]').value,
+            lotNumber: Number(row.querySelector('[name="lotNumber"]').value),
+            amount: Number(row.querySelector('[name="amount"]').value),
+            method: row.querySelector('[name="method"]').value.trim() || null,
+            memo: row.querySelector('[name="memo"]').value.trim()
+        }));
+        const url = editingClientId
+            ? `/api/admin/clients/${encodeURIComponent(editingClientId)}/with-transactions`
+            : transactions.length ? '/api/admin/clients/with-transactions' : '/api/admin/clients';
+        const method = editingClientId ? 'PUT' : 'POST';
+        const payload = editingClientId || transactions.length ? { client, transactions } : client;
+        try {
+            await readResponse(await fetch(url, {
+                method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            }), 'Unable to save client.');
+            message(transactions.length
+                ? `Client and ${transactions.length} transaction${transactions.length === 1 ? '' : 's'} saved.`
+                : 'Client saved.');
+            await loadClients();
+            setTimeout(() => { editor.hidden = true; }, 700);
+        } catch (error) {
+            message(error.message || 'Unable to save client.');
+        } finally {
+            saveButton.disabled = false;
+        }
+    });
+
+    loadClients();
+    const pageParams = new URLSearchParams(location.search);
+    if (pageParams.get('addClient') === 'true') openEditor(null);
+    else if (pageParams.has('clientId')) openEditor(pageParams.get('clientId'));
+</script>
+</body>
+</html>

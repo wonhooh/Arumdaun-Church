@@ -17,30 +17,24 @@ CREATE TABLE IF NOT EXISTS clients (
 );
 
 CREATE TABLE IF NOT EXISTS lots (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    lot_number INTEGER PRIMARY KEY,
     client_id UUID REFERENCES clients(id),
-    lot_number TEXT NOT NULL UNIQUE,
-    price NUMERIC(12, 2) NOT NULL,
-    sold BOOLEAN NOT NULL DEFAULT FALSE,
+    price NUMERIC(12, 2) NOT NULL DEFAULT 700.00,
+    paid_in_full BOOLEAN NOT NULL DEFAULT FALSE,
     information TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS transactions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     client_id UUID REFERENCES clients(id),
-    lot_id UUID REFERENCES lots(id),
     transaction_type TEXT NOT NULL,
-    lot_numbers TEXT[] NOT NULL DEFAULT '{}',
-    total_price INTEGER NOT NULL DEFAULT 0,
-    amount_paid INTEGER NOT NULL DEFAULT 0,
+    lot_number INTEGER NOT NULL REFERENCES lots(lot_number),
     amount NUMERIC(12, 2) NOT NULL DEFAULT 0,
-    refund_amount NUMERIC(12, 2) NOT NULL DEFAULT 0,
     method TEXT,
-    check_number TEXT,
     transaction_date DATE NOT NULL,
-    cancellation_date DATE,
-    cancelled BOOLEAN NOT NULL DEFAULT FALSE
+    memo TEXT NOT NULL DEFAULT ''
 );
 
+CREATE INDEX IF NOT EXISTS idx_lots_client_id ON lots(client_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_client_id ON transactions(client_id);
-CREATE INDEX IF NOT EXISTS idx_transactions_lot_id    ON transactions(lot_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_lot_number ON transactions(lot_number);

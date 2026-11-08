@@ -51,21 +51,30 @@
             border-radius: 8px;
             background: #687780;
         }
-        .client-row-actions { display: grid; gap: 8px; margin: 12px 0 24px; }
-        .client-row-action { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 10px 12px; background: white; border-bottom: 1px solid #d9e1e6; }
-        .client-row-action span { flex: 1 1 240px; overflow-wrap: anywhere; }
-        .client-row-action button, .client-row-action a { padding: 7px 12px; }
-        .sort-button { padding: 0; border: 0; background: transparent; color: inherit; font: inherit; font-weight: 700; cursor: pointer; }
-        .add-client { margin-bottom: 24px; }
+        .lot-editor { max-width: 640px; margin: 12px 0 24px; padding: 20px; background: white; }
+        .lot-editor form { margin-top: 16px; }
+        .lot-editor-details { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+        .lot-editor .checkbox-field { display: flex; align-items: center; gap: 10px; }
+        .lot-editor .checkbox-field input { width: auto; }
+        .transaction-editor { max-width: 760px; margin: 12px 0 24px; padding: 20px; background: white; }
+        .transaction-editor form { margin-top: 16px; }
+        .transaction-section { margin-top: 24px; padding-top: 20px; border-top: 1px solid #d9e1e6; }
+        .transaction-list { display: grid; gap: 8px; overflow-x: auto; }
+        .transaction-entry { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(100px, .7fr) minmax(140px, 1fr) minmax(130px, .9fr) minmax(120px, .8fr) minmax(160px, 1.2fr) auto; gap: 8px; align-items: end; min-width: 1050px; padding: 12px; border: 1px solid #d9e1e6; border-radius: 6px; }
+        .transaction-entry label { min-width: 0; }
+        .transaction-entry input, .transaction-entry select { box-sizing: border-box; width: 100%; min-width: 0; }
+        .transaction-entry .transaction-amount-label { white-space: nowrap; }
+        .transaction-entry [data-remove-transaction] { white-space: nowrap; }
         form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; background: white; padding: 24px; }
         label { display: grid; gap: 6px; font-weight: 700; } input { padding: 10px; border: 1px solid #b9c5cc; border-radius: 4px; font: inherit; }
+        select { padding: 10px; border: 1px solid #b9c5cc; border-radius: 4px; font: inherit; }
         .wide { grid-column: 1 / -1; } .actions { display: flex; gap: 12px; align-items: center; }
         button, a { padding: 10px 16px; border: 0; border-radius: 6px; background: #176b45; color: white; text-decoration: none; font: inherit; cursor: pointer; }
-        #message { font-weight: 700; } @media (max-width: 650px) { form { grid-template-columns: 1fr; } .wide { grid-column: auto; } }
+        @media (max-width: 650px) { form { grid-template-columns: 1fr; } .wide { grid-column: auto; } }
     </style>
 </head>
 <body><main>
-    <p><a href="/">Back to landing page</a></p>
+    <p><a href="/">Home</a></p>
     <section aria-labelledby="table-data-heading">
         <h2 id="table-data-heading">Database tables</h2>
         <p>Select a table to view all its records, download a CSV, or upload a CSV to insert or update records. Upserts use client ID, lot number, or transaction ID as the matching key.</p>
@@ -94,24 +103,51 @@
                 <tbody id="admin-table-body"></tbody>
             </table>
         </div>
-        <div id="client-row-actions" class="client-row-actions" role="group" aria-label="Actions for clients" hidden></div>
-    </section>
-    <button class="add-client" id="add-client" type="button">Add new client</button>
-    <section id="client-form-pane" hidden>
-        <h2 id="heading">Add client</h2>
-        <p id="message"></p>
-        <form id="client-form">
-            <label>Member ID <input name="memberId" type="number"></label>
-            <label>Korean name <input name="koreanName" required></label>
-            <label>English surname <input name="englishSurname" required></label>
-            <label>English given name <input name="englishGivenName" required></label>
-            <label>English middle name <input name="englishMiddleName"></label>
-            <label>Phone 1 <input name="phone1" required></label>
-            <label>Phone 2 <input name="phone2"></label>
-            <label class="wide">Street address <input name="streetAddress"></label>
-            <label>City <input name="city"></label><label>State <input name="state"></label><label>ZIP code <input name="zipCode"></label>
-            <div class="wide actions"><button type="submit">Save Client</button><button id="cancel-client" type="button">Cancel</button></div>
-        </form>
+        <section id="lot-editor" class="lot-editor" aria-labelledby="lot-editor-heading" hidden>
+            <h3 id="lot-editor-heading">View / Edit lot</h3>
+            <p id="lot-editor-message" role="status" aria-live="polite"></p>
+            <div class="lot-editor-details">
+                <p><strong>Lot number:</strong> <span id="lot-editor-number"></span></p>
+                <p><strong>Client ID:</strong> <span id="lot-editor-client"></span></p>
+            </div>
+            <form id="lot-editor-form">
+                <label>Price <input name="price" type="number" min="0" step="0.01" required></label>
+                <label class="wide">Information <input name="information"></label>
+                <label class="checkbox-field wide">
+                    <input name="paidInFull" type="checkbox">
+                    Paid in full
+                </label>
+                <div class="wide actions">
+                    <button type="submit">Save lot</button>
+                    <button id="cancel-lot-edit" type="button">Close</button>
+                </div>
+            </form>
+        </section>
+        <section id="admin-transaction-editor" class="transaction-editor" aria-labelledby="admin-transaction-editor-heading" hidden>
+            <h3 id="admin-transaction-editor-heading">View / Edit transaction</h3>
+            <p id="admin-transaction-editor-message" role="status" aria-live="polite"></p>
+            <p><strong>Transaction ID:</strong> <span id="admin-transaction-id"></span>
+                <strong>Client ID:</strong> <span id="admin-transaction-client"></span></p>
+            <form id="admin-transaction-editor-form">
+                <label>Type
+                    <select name="transactionType" required>
+                        <option value="PURCHASE">Purchase</option>
+                        <option value="PAYMENT">Payment</option>
+                        <option value="REFUND">Refund</option>
+                        <option value="CANCEL">Cancel</option>
+                    </select>
+                </label>
+                <label>Lot number <input name="lotNumber" type="number" min="1" step="1" required></label>
+                <label>Amount <input name="amount" type="number" min="0" step="0.01" required></label>
+                <label>Method <input name="method"></label>
+                <label>Date <input name="transactionDate" type="date" required></label>
+                <label class="wide">Memo <input name="memo" maxlength="2000"></label>
+                <div class="wide actions">
+                    <button type="submit">Save transaction</button>
+                    <button id="cancel-admin-transaction-edit" type="button">Close</button>
+                </div>
+            </form>
+        </section>
     </section>
 </main><script>
     const tableButtons = document.querySelectorAll('[data-table]');
@@ -123,7 +159,13 @@
     const tableContainer = document.querySelector('#admin-table-container');
     const horizontalScrollControl = document.querySelector('#horizontal-scroll-control');
     const horizontalScroll = document.querySelector('#table-horizontal-scroll');
+    const lotEditor = document.querySelector('#lot-editor');
+    const lotEditorForm = document.querySelector('#lot-editor-form');
+    const adminTransactionEditor = document.querySelector('#admin-transaction-editor');
+    const adminTransactionForm = document.querySelector('#admin-transaction-editor-form');
     let selectedTable = null;
+    let editingLotNumber = null;
+    let editingAdminTransactionId = null;
     const escapeHtml = value => String(value ?? '').replace(/[&<>'\"]/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '\"': '&quot;' }[character]));
     const updateHorizontalScroll = () => {
         const maxScroll = Math.max(0, tableContainer.scrollWidth - tableContainer.clientWidth);
@@ -149,29 +191,37 @@
             const data = await response.json();
             selectedTable = data;
             const hasClientActions = data.name === 'clients';
+            const hasLotActions = data.name === 'lots';
+            const hasTransactionActions = data.name === 'transactions';
+            const hasRowActions = hasClientActions || hasLotActions || hasTransactionActions;
+            lotEditor.hidden = true;
+            adminTransactionEditor.hidden = true;
             document.querySelector('#selected-table-title').textContent =
                 `${data.name.charAt(0).toUpperCase()}${data.name.slice(1)}`;
             document.querySelector('#admin-table-head').innerHTML =
-                `<tr>${data.columns.map(column => `<th scope="col">${escapeHtml(column)}</th>`).join('')}</tr>`;
+                `<tr>${hasRowActions ? '<th scope="col">Actions</th>' : ''}${data.columns.map(column => `<th scope="col">${escapeHtml(column)}</th>`).join('')}</tr>`;
             document.querySelector('#admin-table-body').innerHTML = data.rows.length
-                ? data.rows.map(row => `<tr>${row.map(value =>
-                        `<td>${escapeHtml(Array.isArray(value) ? value.join(', ') : value)}</td>`
-                    ).join('')}</tr>`).join('')
-                : `<tr><td colspan="${data.columns.length}">No records found.</td></tr>`;
-            const clientActions = document.querySelector('#client-row-actions');
-            clientActions.hidden = !hasClientActions;
-            clientActions.innerHTML = hasClientActions
                 ? data.rows.map(row => {
-                    const value = column => row[data.columns.indexOf(column)];
-                    const clientId = value('id');
-                    const name = [value('korean_name'), value('surname'), value('given_name')]
-                        .filter(Boolean).join(' / ') || clientId;
-                    return `<div class="client-row-action"><span>${escapeHtml(name)} (ID: ${escapeHtml(clientId)})</span><a href="/admin.html?clientId=${encodeURIComponent(clientId)}">View / Edit</a> <button type="button" data-delete-client="${escapeHtml(clientId)}">Delete</button></div>`;
+                    const cells = row.map(value =>
+                        `<td>${escapeHtml(Array.isArray(value) ? value.join(', ') : value)}</td>`
+                    ).join('');
+                    const rowId = row[data.columns.indexOf(hasLotActions ? 'lot_number' : 'id')];
+                    let actions = '';
+                    if (hasClientActions) {
+                        actions = `<a href="/clients-admin.html?clientId=${encodeURIComponent(rowId)}">View / Edit</a>
+                            <button type="button" data-delete-client="${escapeHtml(rowId)}">Delete</button>`;
+                    } else if (hasLotActions) {
+                        actions = `<button type="button" data-edit-lot="${escapeHtml(rowId)}">View / Edit</button>`;
+                    } else if (hasTransactionActions) {
+                        actions = `<button type="button" data-edit-admin-transaction="${escapeHtml(rowId)}">View / Edit</button>`;
+                    }
+                    return `<tr>${hasRowActions ? `<td>${actions}</td>` : ''}${cells}</tr>`;
                 }).join('')
-                : '';
+                : `<tr><td colspan="${data.columns.length + (hasRowActions ? 1 : 0)}">No records found.</td></tr>`;
             tableContainer.hidden = false;
             const table = tableContainer.querySelector('table');
-            table.style.minWidth = `${Math.max(data.columns.length * 150, tableContainer.clientWidth)}px`;
+            table.style.minWidth =
+                `${Math.max((data.columns.length + (hasRowActions ? 1 : 0)) * 150, tableContainer.clientWidth)}px`;
             tableContainer.scrollLeft = 0;
             tableToolbar.hidden = false;
             downloadTableButton.disabled = false;
@@ -184,13 +234,176 @@
             tableContainer.hidden = true;
             tableToolbar.hidden = true;
             horizontalScrollControl.hidden = true;
-            document.querySelector('#client-row-actions').hidden = true;
+            lotEditor.hidden = true;
             tableButtons.forEach(item => item.setAttribute('aria-pressed', 'false'));
             document.querySelector('#selected-table-title').textContent = '';
             tableMessage.textContent = error.message || `Unable to load ${tableName}.`;
         }
     };
     tableButtons.forEach(button => button.addEventListener('click', () => showTable(button)));
+    tableContainer.addEventListener('click', event => {
+        const deleteClientButton = event.target.closest('[data-delete-client]');
+        if (deleteClientButton && selectedTable?.name === 'clients') {
+            if (!confirm('Delete this client? The record will be hidden but retained in the database.')) return;
+            deleteClientButton.disabled = true;
+            fetch(`/api/admin/clients/${encodeURIComponent(deleteClientButton.dataset.deleteClient)}`, {
+                method: 'DELETE'
+            }).then(async response => {
+                const result = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(result.detail || result.message || 'Unable to delete client.');
+                await showTable(document.querySelector('[data-table="clients"]'));
+            }).catch(error => {
+                deleteClientButton.disabled = false;
+                tableMessage.textContent = error.message || 'Unable to delete client.';
+            });
+            return;
+        }
+        const editLotButton = event.target.closest('[data-edit-lot]');
+        if (editLotButton && selectedTable?.name === 'lots') {
+            showLotEditor(editLotButton.dataset.editLot);
+            return;
+        }
+        const button = event.target.closest('[data-edit-admin-transaction]');
+        if (!button || !selectedTable || selectedTable.name !== 'transactions') return;
+        const transactionId = button.dataset.editAdminTransaction;
+        const row = selectedTable.rows.find(item =>
+            String(item[selectedTable.columns.indexOf('id')]) === transactionId);
+        if (!row) return;
+        const value = column => row[selectedTable.columns.indexOf(column)];
+        editingAdminTransactionId = transactionId;
+        document.querySelector('#admin-transaction-id').textContent = transactionId;
+        document.querySelector('#admin-transaction-client').textContent = value('client_id') ?? '';
+        adminTransactionForm.elements.transactionType.value = value('transaction_type') ?? '';
+        adminTransactionForm.elements.lotNumber.value = value('lot_number') ?? '';
+        adminTransactionForm.elements.amount.value = value('amount') ?? 0;
+        adminTransactionForm.elements.method.value = value('method') ?? '';
+        adminTransactionForm.elements.transactionDate.value = value('transaction_date') ?? '';
+        adminTransactionForm.elements.memo.value = value('memo') ?? '';
+        document.querySelector('#admin-transaction-editor-message').textContent = '';
+        adminTransactionEditor.hidden = false;
+        adminTransactionEditor.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+    document.querySelector('#cancel-admin-transaction-edit').addEventListener('click', () => {
+        adminTransactionEditor.hidden = true;
+        editingAdminTransactionId = null;
+    });
+    adminTransactionForm.addEventListener('submit', async event => {
+        event.preventDefault();
+        if (editingAdminTransactionId === null) return;
+        const saveButton = adminTransactionForm.querySelector('[type="submit"]');
+        saveButton.disabled = true;
+        document.querySelector('#admin-transaction-editor-message').textContent = 'Saving transaction...';
+        try {
+            const type = adminTransactionForm.elements.transactionType.value;
+            const response = await fetch(
+                `/api/admin/transactions/${encodeURIComponent(editingAdminTransactionId)}`,
+                {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        transactionType: type,
+                        lotNumber: Number(adminTransactionForm.elements.lotNumber.value),
+                        amount: type === 'CANCEL' ? 0 : Number(adminTransactionForm.elements.amount.value),
+                        method: adminTransactionForm.elements.method.value,
+                        transactionDate: adminTransactionForm.elements.transactionDate.value,
+                        memo: adminTransactionForm.elements.memo.value
+                    })
+                });
+            const responseText = await response.text();
+            let result = {};
+            if (responseText) {
+                try {
+                    result = JSON.parse(responseText);
+                } catch {
+                    result.detail = responseText.trim().slice(0, 400);
+                }
+            }
+            if (!response.ok) {
+                throw new Error(result.detail || result.message || result.error
+                    || `HTTP ${response.status} ${response.statusText}`.trim());
+            }
+            const button = [...tableButtons].find(item => item.dataset.table === 'transactions');
+            if (button) await showTable(button);
+            const updatedButton = [...tableContainer.querySelectorAll('[data-edit-admin-transaction]')]
+                .find(item => item.dataset.editAdminTransaction === editingAdminTransactionId);
+            if (updatedButton) {
+                updatedButton.click();
+                document.querySelector('#admin-transaction-editor-message').textContent = 'Transaction saved.';
+            }
+        } catch (error) {
+            document.querySelector('#admin-transaction-editor-message').textContent =
+                error.message || 'Unable to save transaction.';
+        } finally {
+            saveButton.disabled = false;
+        }
+    });
+    const showLotEditor = lotNumber => {
+        if (!selectedTable || selectedTable.name !== 'lots') return;
+        const row = selectedTable.rows.find(item =>
+            String(item[selectedTable.columns.indexOf('lot_number')]) === String(lotNumber));
+        if (!row) return;
+        const value = column => row[selectedTable.columns.indexOf(column)];
+        editingLotNumber = String(value('lot_number'));
+        document.querySelector('#lot-editor-number').textContent = editingLotNumber;
+        document.querySelector('#lot-editor-client').textContent = value('client_id') || 'Unassigned';
+        lotEditorForm.elements.price.value = value('price');
+        lotEditorForm.elements.information.value = value('information') ?? '';
+        lotEditorForm.elements.paidInFull.checked = value('paid_in_full') === true;
+        document.querySelector('#lot-editor-message').textContent = '';
+        lotEditor.hidden = false;
+        lotEditor.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    };
+    document.querySelector('#cancel-lot-edit').addEventListener('click', () => {
+        lotEditor.hidden = true;
+        editingLotNumber = null;
+    });
+    lotEditorForm.addEventListener('submit', async event => {
+        event.preventDefault();
+        if (editingLotNumber === null) return;
+        const saveButton = lotEditorForm.querySelector('[type="submit"]');
+        saveButton.disabled = true;
+        document.querySelector('#lot-editor-message').textContent = 'Saving lot...';
+        try {
+            const response = await fetch(`/api/admin/lots/${encodeURIComponent(editingLotNumber)}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    price: Number(lotEditorForm.elements.price.value),
+                    information: lotEditorForm.elements.information.value,
+                    paidInFull: lotEditorForm.elements.paidInFull.checked
+                })
+            });
+            const responseText = await response.text();
+            let result = {};
+            if (responseText) {
+                try {
+                    result = JSON.parse(responseText);
+                } catch {
+                    result.detail = responseText.trim().slice(0, 400);
+                }
+            }
+            if (!response.ok) {
+                const reason = result.detail || result.message || result.error
+                    || `HTTP ${response.status} ${response.statusText}`.trim();
+                const guidance = response.status === 404 && !result.detail && !result.message
+                    ? ' The running application may need to be rebuilt and restarted with the latest code.'
+                    : '';
+                throw new Error(`Unable to save lot: ${reason}.${guidance}`);
+            }
+            const button = [...tableButtons].find(item => item.dataset.table === 'lots');
+            if (button) await showTable(button);
+            const updatedLotButton = [...tableContainer.querySelectorAll('[data-edit-lot]')]
+                .find(item => item.dataset.editLot === editingLotNumber);
+            if (updatedLotButton) {
+                showLotEditor(updatedLotButton.dataset.editLot);
+                document.querySelector('#lot-editor-message').textContent = 'Lot saved.';
+            }
+        } catch (error) {
+            document.querySelector('#lot-editor-message').textContent = error.message || 'Unable to save lot.';
+        } finally {
+            saveButton.disabled = false;
+        }
+    });
     uploadTableButton.addEventListener('click', () => {
         if (selectedTable) uploadTableFile.click();
     });
@@ -262,78 +475,5 @@
         link.click();
         link.remove();
         setTimeout(() => URL.revokeObjectURL(url), 0);
-    });
-    const form = document.querySelector('#client-form');
-    const formPane = document.querySelector('#client-form-pane');
-    const addClientButton = document.querySelector('#add-client');
-    const cancelClientButton = document.querySelector('#cancel-client');
-    let editingClientId = new URLSearchParams(location.search).get('clientId');
-    const fields = ['memberId', 'koreanName', 'englishSurname', 'englishGivenName', 'englishMiddleName', 'phone1', 'phone2', 'streetAddress', 'city', 'state', 'zipCode'];
-    const message = text => document.querySelector('#message').textContent = text;
-    const refreshAdminClients = async () => {
-        if (selectedTable?.name !== 'clients') return;
-        const clientsButton = [...tableButtons].find(item => item.dataset.table === 'clients');
-        if (clientsButton) await showTable(clientsButton);
-    };
-    const deleteClient = async clientId => {
-        if (!confirm('Delete this client? The record will be hidden but retained in the database.')) return;
-        try {
-            const response = await fetch(`/api/admin/clients/${encodeURIComponent(clientId)}`, { method: 'DELETE' });
-            if (!response.ok) {
-                const error = await response.json().catch(() => ({}));
-                throw new Error(error.detail || error.message || 'Unable to delete client.');
-            }
-            await refreshAdminClients();
-            message('Client deleted.');
-            tableMessage.textContent = 'Client deleted.';
-        } catch (error) {
-            message(error.message);
-            tableMessage.textContent = error.message;
-        }
-    };
-    document.querySelector('#client-row-actions').addEventListener('click', event => {
-        const button = event.target.closest('[data-delete-client]');
-        if (!button) return;
-        deleteClient(button.dataset.deleteClient);
-    });
-    addClientButton.addEventListener('click', () => {
-        editingClientId = null;
-        form.reset();
-        document.querySelector('#heading').textContent = 'Add client';
-        message('');
-        formPane.hidden = false;
-        form.elements.koreanName.focus();
-    });
-    cancelClientButton.addEventListener('click', () => {
-        form.reset();
-        formPane.hidden = true;
-        message('');
-    });
-    if (editingClientId) {
-        formPane.hidden = false;
-        document.querySelector('#heading').textContent = 'Edit client';
-        fetch(`/api/admin/clients/${encodeURIComponent(editingClientId)}`)
-            .then(async response => {
-                if (response.ok) return response.json();
-                const error = await response.json().catch(() => ({}));
-                throw new Error(error.detail || error.message || 'Unable to load client.');
-            }).then(client => {
-                fields.forEach(field => form.elements[field].value = client[field] ?? '');
-            }).catch(error => message(error.message || 'Unable to load client.'));
-    }
-    form.addEventListener('submit', event => {
-        event.preventDefault();
-        const data = Object.fromEntries(fields.map(field => [field, form.elements[field].value.trim()]));
-        data.memberId = data.memberId === '' ? null : Number(data.memberId);
-        const method = editingClientId ? 'PUT' : 'POST';
-        const url = editingClientId ? `/api/admin/clients/${editingClientId}` : '/api/admin/clients';
-        fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
-            .then(response => response.ok ? response.json() : response.json().then(error => Promise.reject(error)))
-            .then(client => {
-                message('Client saved.');
-                return refreshAdminClients();
-            })
-            .then(() => { formPane.hidden = true; })
-            .catch(error => message(error.message || 'Unable to save client.'));
     });
 </script></body></html>

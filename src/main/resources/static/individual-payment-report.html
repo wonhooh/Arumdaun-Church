@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Individual Payment Record | Arumdaun Church Cemetery</title>
+    <style>
+        :root { font-family: Georgia, "Times New Roman", serif; color: #202522; background: #f3f6f8; }
+        body { margin: 0; }
+        main { max-width: 1440px; margin: 0 auto; padding: 28px 24px; }
+        nav { display: flex; gap: 12px; margin-bottom: 20px; font-family: system-ui, sans-serif; }
+        nav a, button { padding: 9px 14px; border: 0; border-radius: 5px; background: #176b45; color: white; text-decoration: none; font: inherit; cursor: pointer; }
+        .report-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; font-family: system-ui, sans-serif; }
+        #report-status { min-height: 1.4em; font-family: system-ui, sans-serif; }
+        h1 { margin: 0 0 14px; text-align: center; font-size: 1.2rem; letter-spacing: .08em; }
+        .table-scroll { overflow-x: auto; background: white; }
+        table { width: 100%; min-width: 950px; border-collapse: collapse; table-layout: fixed; background: white; }
+        col.lot { width: 9%; }
+        col.name { width: 19%; }
+        col.price { width: 10%; }
+        col.payment { width: 10%; }
+        col.remarks { width: 22%; }
+        th, td { border: 1px solid #252a27; padding: 7px 8px; text-align: center; vertical-align: middle; overflow-wrap: anywhere; }
+        thead th { background: #f7f7f3; font-weight: 600; }
+        tbody td { height: 54px; }
+        td.name, td.remarks { text-align: left; }
+        .payment-type { font-weight: 700; }
+        .payment-amount { white-space: nowrap; }
+        @media (max-width: 700px) {
+            main { padding: 18px 12px; }
+            .report-toolbar { align-items: flex-start; flex-direction: column; }
+        }
+        @page { size: landscape; margin: 0.35in; }
+        @media print {
+            :root, body { background: white; }
+            main { max-width: none; padding: 0; }
+            nav, .report-toolbar, #report-status { display: none !important; }
+            h1 { margin: 0 0 8px; font-size: 12pt; }
+            .table-scroll { overflow: visible; }
+            table { width: 100%; min-width: 0; font-size: 8pt; }
+            th, td { padding: 4px; }
+            tbody td { height: 43px; }
+            thead { display: table-header-group; }
+            tr { break-inside: avoid; }
+        }
+    </style>
+</head>
+<body>
+<main>
+    <nav aria-label="Report navigation">
+        <a href="/">Home</a>
+    </nav>
+    <div class="report-toolbar">
+        <p>Purchase and Payment appear in the four payment columns. Refunds, Cancels, memos, and additional payments appear in Remarks.</p>
+        <button id="print-report" type="button">Print report</button>
+    </div>
+    <p id="report-status" role="status" aria-live="polite">Loading report...</p>
+    <h1>** INDIVIDUAL PAYMENT RECORD **</h1>
+    <div class="table-scroll">
+        <table aria-describedby="report-status">
+            <colgroup>
+                <col class="lot"><col class="name"><col class="price">
+                <col class="payment"><col class="payment"><col class="payment"><col class="payment">
+                <col class="remarks">
+            </colgroup>
+            <thead>
+                <tr>
+                    <th scope="col" rowspan="2">LOT NO.</th>
+                    <th scope="col" rowspan="2">NAME</th>
+                    <th scope="col" rowspan="2">PRICE</th>
+                    <th scope="colgroup" colspan="4">PAYMENT RECORD</th>
+                    <th scope="col" rowspan="2">REMARK</th>
+                </tr>
+                <tr>
+                    <th scope="col">1st</th>
+                    <th scope="col">2nd</th>
+                    <th scope="col">3rd</th>
+                    <th scope="col">4th</th>
+                </tr>
+            </thead>
+            <tbody id="report-rows"></tbody>
+        </table>
+    </div>
+</main>
+<script>
+    const reportRows = document.querySelector('#report-rows');
+    const reportStatus = document.querySelector('#report-status');
+    const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, character => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[character]));
+    const money = value => new Intl.NumberFormat('en-US', {
+        style: 'currency', currency: 'USD'
+    }).format(Number(value ?? 0));
+    const renderReport = lots => {
+        reportRows.innerHTML = lots.length ? lots.map(lot => {
+            const payments = Array.from({ length: 4 }, (_, index) => {
+                const payment = lot.payments[index];
+                if (!payment) return '<td></td>';
+                return `<td><span class="payment-type">${escapeHtml(payment.type)}</span><br>
+                    ${escapeHtml(payment.date)}<br>
+                    <span class="payment-amount">${money(payment.amount)}</span>
+                    ${payment.method ? `<br>${escapeHtml(payment.method)}` : ''}</td>`;
+            }).join('');
+            return `<tr>
+                <td>${String(lot.lotNumber).padStart(3, '0')}</td>
+                <td class="name">${escapeHtml(lot.name)}</td>
+                <td>${money(lot.price)}</td>
+                ${payments}
+                <td class="remarks">${escapeHtml(lot.remarks)}</td>
+            </tr>`;
+        }).join('') : '<tr><td colspan="8">No lots found.</td></tr>';
+        reportStatus.textContent = `${lots.length} lot${lots.length === 1 ? '' : 's'} in report.`;
+    };
+    document.querySelector('#print-report').addEventListener('click', () => window.print());
+    fetch('/api/admin/reports/individual-payment-record', { cache: 'no-store' })
+        .then(async response => {
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(result.detail || result.message || 'Unable to load report.');
+            return result;
+        })
+        .then(renderReport)
+        .catch(error => {
+            reportRows.innerHTML = '<tr><td colspan="8">Report could not be loaded.</td></tr>';
+            reportStatus.textContent = error.message || 'Unable to load report.';
+        });
+</script>
+</body>
+</html>
