@@ -2,10 +2,8 @@ package com.arumdaun.church;
 
 import java.io.Serializable;
 import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.UUID;
 
 public class Purchase implements Serializable {
@@ -98,28 +96,21 @@ public class Purchase implements Serializable {
             }
             builder.append(lots.get(i).getLotNumber());
         }
-        builder.append(" | Total: ").append(formatMoney(totalPrice))
-                .append(" | Paid: ").append(formatMoney(amountPaid))
-                .append(" | Purchase Date: ").append(formatDate(purchaseDate))
+        builder.append(" | Total: ").append(DisplayFormats.formatMoney(totalPrice))
+                .append(" | Paid: ").append(DisplayFormats.formatMoney(amountPaid))
+                .append(" | Purchase Date: ").append(DisplayFormats.formatDate(purchaseDate))
                 .append(" | Status: ").append(cancelled ? "Cancelled" : "Active");
         if (cancelled) {
-            builder.append(" | Cancel Date: ").append(formatDate(cancellationDate))
-                    .append(" | Refund: ").append(formatMoney(refundAmount));
+            builder.append(" | Cancel Date: ").append(DisplayFormats.formatDate(cancellationDate))
+                    .append(" | Refund: ").append(DisplayFormats.formatMoney(refundAmount));
         }
         return builder.toString();
     }
 
     @Override
     public String toString() {
-        return purchaseId + " | Client: " + clientId + " | Total: " + formatMoney(totalPrice)
-                + " | Amount Paid: " + formatMoney(amountPaid) + " | " + (cancelled ? "Cancelled" : "Active");
-    }
-
-    private String formatMoney(double value) {
-        return String.format(Locale.US, "$%,.2f", value);
-    }
-
-    private String formatDate(LocalDate date) {
-        return date == null ? "Unknown" : date.format(DateTimeFormatter.ISO_LOCAL_DATE);
+        return purchaseId + " | Client: " + clientId + " | Total: " + DisplayFormats.formatMoney(totalPrice)
+                + " | Amount Paid: " + DisplayFormats.formatMoney(amountPaid) + " | "
+                + (cancelled ? "Cancelled" : "Active");
     }
 }

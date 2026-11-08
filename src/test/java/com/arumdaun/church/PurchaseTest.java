@@ -19,8 +19,8 @@ class PurchaseTest {
         Purchase purchase = new Purchase(PURCHASE_ID, CLIENT_ID, List.of(lot), 2500, 1000,
                 LocalDate.of(2026, 9, 5));
 
-        assertEquals("Purchase ID: " + PURCHASE_ID + " | Client: " + CLIENT_ID + " | Lots: A-1 | Total: $2,500.00 "
-                + "| Paid: $1,000.00 | Purchase Date: 2026-09-05 | Status: Active",
+        assertEquals("Purchase ID: " + PURCHASE_ID + " | Client: " + CLIENT_ID + " | Lots: A-1 | Total: $2,500 "
+                + "| Paid: $1,000 | Purchase Date: 09/05/2026 | Status: Active",
                 purchase.reportSummary());
         assertFalse(purchase.isCancelled());
     }
@@ -36,7 +36,7 @@ class PurchaseTest {
 
         assertTrue(purchase.reportSummary().contains("Status: Cancelled"));
         assertTrue(purchase.reportSummary().contains("Cancel Date: Unknown"));
-        assertTrue(purchase.reportSummary().contains("Refund: $1,000.00"));
+        assertTrue(purchase.reportSummary().contains("Refund: $1,000"));
     }
 
     @Test

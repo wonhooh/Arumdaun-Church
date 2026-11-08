@@ -133,7 +133,8 @@ public class Client implements Serializable {
     @Override
     public String toString() {
         return "Client Id: " + id + " | Member Id: " + memberId + " | Client Name: " + getDisplayName() +
-                " | Phones: " + phone1 + ", " + (phone2 == null ? "" : phone2);
+            " | Phones: " + DisplayFormats.formatPhone(phone1) + ", "
+            + DisplayFormats.formatPhone(phone2);
     }
 
 }

@@ -110,6 +110,7 @@
         </form>
     </section>
 </main>
+<script src="/display-format.js"></script>
 <script>
     const clientRows = document.querySelector('#client-rows');
     const listMessage = document.querySelector('#list-message');
@@ -124,13 +125,10 @@
     const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, character => ({
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
     }[character]));
-    const money = value => new Intl.NumberFormat('en-US', {
-        style: 'currency', currency: 'USD'
-    }).format(Number(value ?? 0));
+    const money = DisplayFormats.formatMoney;
     const message = value => document.querySelector('#message').textContent = value;
     let editingClientId = null;
     let transactionsForClient = [];
-    let availableLots = [];
 
     const readResponse = async (response, fallback) => {
         const text = await response.text();
@@ -165,7 +163,7 @@
                     </td>
                     <td>${escapeHtml(client.memberId)}</td>
                     <td>${escapeHtml(name)}</td>
-                    <td>${escapeHtml(client.phone1)}</td>
+                    <td>${escapeHtml(DisplayFormats.formatPhone(client.phone1))}</td>
                 </tr>`;
             }).join('') : '<tr><td colspan="4">No active clients found.</td></tr>';
             listMessage.textContent = `${clients.length} client${clients.length === 1 ? '' : 's'} loaded.`;
@@ -177,15 +175,14 @@
 
     const renderTransactions = transactions => {
         transactionsForClient = transactions;
-        const formatter = new Intl.DateTimeFormat('en-US', { style: 'currency', currency: 'USD' });
         existingTransactions.innerHTML = transactions.length
             ? `<h4>Existing transactions</h4><div class="table-scroll"><table>
                 <thead><tr><th>Type</th><th>Date</th><th>Lot</th><th>Amount</th><th>Method</th><th>Memo</th><th>Action</th></tr></thead>
                 <tbody>${transactions.map(transaction => `<tr>
                     <td>${escapeHtml(transaction.transactionType)}</td>
-                    <td>${escapeHtml(transaction.transactionDate)}</td>
+                    <td>${escapeHtml(DisplayFormats.formatDate(transaction.transactionDate))}</td>
                     <td>${escapeHtml(transaction.lotNumber)}</td>
-                    <td>${formatter.format(Number(transaction.amount))}</td>
+                    <td>${escapeHtml(money(transaction.amount))}</td>
                     <td>${escapeHtml(transaction.method)}</td>
                     <td>${escapeHtml(transaction.memo)}</td>
                     <td><button type="button" data-edit-transaction="${escapeHtml(transaction.id)}">View / Edit</button></td>
@@ -199,9 +196,6 @@
         if (transaction?.id) row.dataset.transactionId = transaction.id;
         const today = new Date();
         const localDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-        const options = availableLots.map(lot =>
-            `<option value="${escapeHtml(lot.lotNumber)}">Lot ${escapeHtml(lot.lotNumber)} — ${money(lot.price)}</option>`
-        ).join('');
         row.innerHTML = `
             <label>Type
                 <select name="transactionType">
@@ -209,11 +203,7 @@
                     <option value="REFUND">Refund</option><option value="CANCEL">Cancel</option>
                 </select>
             </label>
-            <label>Lot number
-                <select name="lotNumber" required>
-                    <option value="">${availableLots.length ? 'Select lot' : 'No lots available'}</option>${options}
-                </select>
-            </label>
+            <label>Lot number <input name="lotNumber" type="number" min="1" max="500" step="1" required placeholder="1–500"></label>
             <label>Date <input name="transactionDate" type="date" required value="${localDate}"></label>
             <label class="amount-label">Initial paid <input name="amount" type="number" min="0" step="1" value="0" required></label>
             <label>Method <input name="method" placeholder="Cash, check, card"></label>
@@ -255,22 +245,19 @@
             ? 'Use View / Edit to load an existing transaction below, or add additional transaction rows.'
             : 'Optional: add transactions now, one lot per row.';
         try {
-            const query = clientId ? `?clientId=${encodeURIComponent(clientId)}` : '';
-            const requests = [
-                fetch(`/api/admin/lots/available${query}`, { cache: 'no-store' })
-            ];
-            if (clientId) {
-                requests.push(fetch(`/api/admin/clients/${encodeURIComponent(clientId)}`));
-                requests.push(fetch(`/api/admin/clients/${encodeURIComponent(clientId)}/transactions`));
-            }
-            const responses = await Promise.all(requests);
-            availableLots = await readResponse(responses[0], 'Unable to load available lots.');
             if (clientId) {
                 const [client, transactions] = await Promise.all([
-                    readResponse(responses[1], 'Unable to load client.'),
-                    readResponse(responses[2], 'Unable to load transactions.')
+                    readResponse(await fetch(`/api/admin/clients/${encodeURIComponent(clientId)}`),
+                        'Unable to load client.'),
+                    readResponse(await fetch(`/api/admin/clients/${encodeURIComponent(clientId)}/transactions`),
+                        'Unable to load transactions.')
                 ]);
-                fields.forEach(field => form.elements[field].value = client[field] ?? '');
+                fields.forEach(field => {
+                    const value = client[field] ?? '';
+                    form.elements[field].value = field === 'phone1' || field === 'phone2'
+                        ? DisplayFormats.formatPhone(value)
+                        : value;
+                });
                 renderTransactions(transactions);
             }
             message('');
@@ -303,6 +290,12 @@
         }
     });
 
+    for (const phoneField of [form.elements.phone1, form.elements.phone2]) {
+        phoneField.addEventListener('blur', () => {
+            phoneField.value = DisplayFormats.formatPhone(phoneField.value);
+        });
+    }
+
     existingTransactions.addEventListener('click', event => {
         const button = event.target.closest('[data-edit-transaction]');
         if (!button) return;
@@ -325,30 +318,19 @@
         transactionList.replaceChildren();
         message('');
     });
-    document.querySelector('#add-transaction').addEventListener('click', async event => {
-        const button = event.currentTarget;
-        button.disabled = true;
-        try {
-            if (!availableLots.length) {
-                const query = editingClientId ? `?clientId=${encodeURIComponent(editingClientId)}` : '';
-                availableLots = await readResponse(
-                    await fetch(`/api/admin/lots/available${query}`),
-                    'Unable to load available lots.');
-            }
-            addTransactionRow();
-        } catch (error) {
-            message(error.message || 'Unable to load available lots.');
-        } finally {
-            button.disabled = false;
-        }
-    });
+    document.querySelector('#add-transaction').addEventListener('click', () => addTransactionRow());
 
     form.addEventListener('submit', async event => {
         event.preventDefault();
         const saveButton = form.querySelector('[type="submit"]');
         saveButton.disabled = true;
         message('Saving client...');
-        const client = Object.fromEntries(fields.map(field => [field, form.elements[field].value.trim()]));
+        const client = Object.fromEntries(fields.map(field => {
+            const value = form.elements[field].value.trim();
+            return [field, field === 'phone1' || field === 'phone2'
+                ? DisplayFormats.formatPhone(value)
+                : value];
+        }));
         client.memberId = client.memberId === '' ? null : Number(client.memberId);
         const transactions = [...transactionList.querySelectorAll('.transaction-entry')].map(row => ({
             id: row.dataset.transactionId || null,

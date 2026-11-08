@@ -137,7 +137,7 @@
                         <option value="CANCEL">Cancel</option>
                     </select>
                 </label>
-                <label>Lot number <input name="lotNumber" type="number" min="1" step="1" required></label>
+                <label>Lot number <input name="lotNumber" type="number" min="1" max="500" step="1" required></label>
                 <label>Amount <input name="amount" type="number" min="0" step="0.01" required></label>
                 <label>Method <input name="method"></label>
                 <label>Date <input name="transactionDate" type="date" required></label>
@@ -149,7 +149,8 @@
             </form>
         </section>
     </section>
-</main><script>
+</main><script src="/display-format.js"></script>
+<script>
     const tableButtons = document.querySelectorAll('[data-table]');
     const tableMessage = document.querySelector('#table-message');
     const downloadTableButton = document.querySelector('#download-table');
@@ -163,10 +164,19 @@
     const lotEditorForm = document.querySelector('#lot-editor-form');
     const adminTransactionEditor = document.querySelector('#admin-transaction-editor');
     const adminTransactionForm = document.querySelector('#admin-transaction-editor-form');
-    let selectedTable = null;
     let editingLotNumber = null;
     let editingAdminTransactionId = null;
+    let selectedTable = null;
     const escapeHtml = value => String(value ?? '').replace(/[&<>'\"]/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '\"': '&quot;' }[character]));
+    const moneyColumns = new Set(['price', 'total_price', 'amount_paid', 'amount', 'refund_amount']);
+    const dateColumns = new Set(['date', 'transaction_date', 'cancellation_date', 'deleted_date']);
+    const formatTableValue = (value, column) => {
+        if (value === null || value === undefined) return '';
+        if (moneyColumns.has(column)) return DisplayFormats.formatMoney(value);
+        if (dateColumns.has(column) || column.endsWith('_date')) return DisplayFormats.formatDate(value);
+        if (column === 'phone1' || column === 'phone2') return DisplayFormats.formatPhone(value);
+        return Array.isArray(value) ? value.join(', ') : value;
+    };
     const updateHorizontalScroll = () => {
         const maxScroll = Math.max(0, tableContainer.scrollWidth - tableContainer.clientWidth);
         horizontalScroll.max = String(maxScroll);
@@ -202,8 +212,8 @@
                 `<tr>${hasRowActions ? '<th scope="col">Actions</th>' : ''}${data.columns.map(column => `<th scope="col">${escapeHtml(column)}</th>`).join('')}</tr>`;
             document.querySelector('#admin-table-body').innerHTML = data.rows.length
                 ? data.rows.map(row => {
-                    const cells = row.map(value =>
-                        `<td>${escapeHtml(Array.isArray(value) ? value.join(', ') : value)}</td>`
+                    const cells = row.map((value, index) =>
+                        `<td>${escapeHtml(formatTableValue(value, data.columns[index]))}</td>`
                     ).join('');
                     const rowId = row[data.columns.indexOf(hasLotActions ? 'lot_number' : 'id')];
                     let actions = '';

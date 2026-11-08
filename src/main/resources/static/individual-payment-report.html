@@ -26,16 +26,36 @@
         td.name, td.remarks { text-align: left; }
         .payment-type { font-weight: 700; }
         .payment-amount { white-space: nowrap; }
+        .report-page { margin-bottom: 24px; padding: 18px; background: white; }
+        .report-page h1 { margin: 0 0 14px; text-align: center; font-size: 1.2rem; letter-spacing: .08em; }
         @media (max-width: 700px) {
             main { padding: 18px 12px; }
             .report-toolbar { align-items: flex-start; flex-direction: column; }
         }
-        @page { size: landscape; margin: 0.35in; }
+        @page {
+            size: landscape;
+            margin: 0.35in 0.35in 0.55in;
+            @bottom-left {
+                content: "Printed on";
+                font: 8pt Georgia, "Times New Roman", serif;
+                color: #202522;
+            }
+        }
         @media print {
             :root, body { background: white; }
             main { max-width: none; padding: 0; }
             nav, .report-toolbar, #report-status { display: none !important; }
-            h1 { margin: 0 0 8px; font-size: 12pt; }
+            .report-page {
+                margin: 0;
+                padding: 0;
+                break-after: page;
+                page-break-after: always;
+            }
+            .report-page:last-child {
+                break-after: auto;
+                page-break-after: auto;
+            }
+            .report-page h1 { margin: 0 0 8px; font-size: 12pt; }
             .table-scroll { overflow: visible; }
             table { width: 100%; min-width: 0; font-size: 8pt; }
             th, td { padding: 4px; }
@@ -51,67 +71,79 @@
         <a href="/">Home</a>
     </nav>
     <div class="report-toolbar">
-        <p>Purchase and Payment appear in the four payment columns. Refunds, Cancels, memos, and additional payments appear in Remarks.</p>
-        <button id="print-report" type="button">Print report</button>
+        <p>Purchase and Payment appear in the four payment columns. Refunds, Cancels, memos, and additional payments appear in Remarks. PDFs are split into pages of 10 records.</p>
+        <a class="report-pdf-button" href="/api/admin/reports/individual-payment-record.pdf" target="_blank" rel="noopener">
+            Open PDF
+        </a>
     </div>
     <p id="report-status" role="status" aria-live="polite">Loading report...</p>
-    <h1>** INDIVIDUAL PAYMENT RECORD **</h1>
-    <div class="table-scroll">
-        <table aria-describedby="report-status">
-            <colgroup>
-                <col class="lot"><col class="name"><col class="price">
-                <col class="payment"><col class="payment"><col class="payment"><col class="payment">
-                <col class="remarks">
-            </colgroup>
-            <thead>
-                <tr>
-                    <th scope="col" rowspan="2">LOT NO.</th>
-                    <th scope="col" rowspan="2">NAME</th>
-                    <th scope="col" rowspan="2">PRICE</th>
-                    <th scope="colgroup" colspan="4">PAYMENT RECORD</th>
-                    <th scope="col" rowspan="2">REMARK</th>
-                </tr>
-                <tr>
-                    <th scope="col">1st</th>
-                    <th scope="col">2nd</th>
-                    <th scope="col">3rd</th>
-                    <th scope="col">4th</th>
-                </tr>
-            </thead>
-            <tbody id="report-rows"></tbody>
-        </table>
-    </div>
+    <div id="report-pages"></div>
 </main>
+<script src="/display-format.js"></script>
 <script>
-    const reportRows = document.querySelector('#report-rows');
+    const reportPages = document.querySelector('#report-pages');
     const reportStatus = document.querySelector('#report-status');
+    const recordsPerPage = 10;
     const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, character => ({
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
     }[character]));
-    const money = value => new Intl.NumberFormat('en-US', {
-        style: 'currency', currency: 'USD'
-    }).format(Number(value ?? 0));
+    const money = DisplayFormats.formatMoney;
+    const renderLot = lot => {
+        const payments = Array.from({ length: 4 }, (_, index) => {
+            const payment = lot.payments[index];
+            if (!payment) return '<td></td>';
+            return `<td><span class="payment-type">${escapeHtml(payment.type)}</span><br>
+                ${escapeHtml(DisplayFormats.formatDate(payment.date))}<br>
+                <span class="payment-amount">${escapeHtml(money(payment.amount))}</span>
+                ${payment.method ? `<br>${escapeHtml(payment.method)}` : ''}</td>`;
+        }).join('');
+        return `<tr>
+            <td>${String(lot.lotNumber).padStart(3, '0')}</td>
+            <td class="name">${escapeHtml(lot.name)}</td>
+            <td>${escapeHtml(money(lot.price))}</td>
+            ${payments}
+            <td class="remarks">${escapeHtml(lot.remarks)}</td>
+        </tr>`;
+    };
     const renderReport = lots => {
-        reportRows.innerHTML = lots.length ? lots.map(lot => {
-            const payments = Array.from({ length: 4 }, (_, index) => {
-                const payment = lot.payments[index];
-                if (!payment) return '<td></td>';
-                return `<td><span class="payment-type">${escapeHtml(payment.type)}</span><br>
-                    ${escapeHtml(payment.date)}<br>
-                    <span class="payment-amount">${money(payment.amount)}</span>
-                    ${payment.method ? `<br>${escapeHtml(payment.method)}` : ''}</td>`;
-            }).join('');
-            return `<tr>
-                <td>${String(lot.lotNumber).padStart(3, '0')}</td>
-                <td class="name">${escapeHtml(lot.name)}</td>
-                <td>${money(lot.price)}</td>
-                ${payments}
-                <td class="remarks">${escapeHtml(lot.remarks)}</td>
-            </tr>`;
-        }).join('') : '<tr><td colspan="8">No lots found.</td></tr>';
+        const pages = [];
+        for (let start = 0; start < lots.length; start += recordsPerPage) {
+            pages.push(lots.slice(start, start + recordsPerPage));
+        }
+        if (pages.length === 0) pages.push([]);
+        reportPages.innerHTML = pages.map(pageLots => `
+            <section class="report-page">
+                <h1>** INDIVIDUAL PAYMENT RECORD **</h1>
+                <div class="table-scroll">
+                    <table>
+                        <colgroup>
+                            <col class="lot"><col class="name"><col class="price">
+                            <col class="payment"><col class="payment"><col class="payment"><col class="payment">
+                            <col class="remarks">
+                        </colgroup>
+                        <thead>
+                            <tr>
+                                <th scope="col" rowspan="2">LOT NO.</th>
+                                <th scope="col" rowspan="2">NAME</th>
+                                <th scope="col" rowspan="2">PRICE</th>
+                                <th scope="colgroup" colspan="4">PAYMENT RECORD</th>
+                                <th scope="col" rowspan="2">REMARK</th>
+                            </tr>
+                            <tr>
+                                <th scope="col">1st</th>
+                                <th scope="col">2nd</th>
+                                <th scope="col">3rd</th>
+                                <th scope="col">4th</th>
+                            </tr>
+                        </thead>
+                        <tbody>${pageLots.length
+                ? pageLots.map(renderLot).join('')
+                : '<tr><td colspan="8">No lots found.</td></tr>'}</tbody>
+                    </table>
+                </div>
+            </section>`).join('');
         reportStatus.textContent = `${lots.length} lot${lots.length === 1 ? '' : 's'} in report.`;
     };
-    document.querySelector('#print-report').addEventListener('click', () => window.print());
     fetch('/api/admin/reports/individual-payment-record', { cache: 'no-store' })
         .then(async response => {
             const result = await response.json().catch(() => ({}));
@@ -120,7 +152,10 @@
         })
         .then(renderReport)
         .catch(error => {
-            reportRows.innerHTML = '<tr><td colspan="8">Report could not be loaded.</td></tr>';
+            reportPages.replaceChildren();
+            const errorMessage = document.createElement('p');
+            errorMessage.textContent = 'Report could not be loaded.';
+            reportPages.append(errorMessage);
             reportStatus.textContent = error.message || 'Unable to load report.';
         });
 </script>

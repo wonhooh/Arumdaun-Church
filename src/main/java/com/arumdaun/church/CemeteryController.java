@@ -11,6 +11,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import org.springframework.dao.DataAccessException;
+import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -26,12 +27,17 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+
 @RestController
+@SecurityRequirement(name = "adminBasicAuth")
 public class CemeteryController {
     private final PostgresRepository repository;
+    private final IndividualPaymentReportPdfService reportPdfService;
 
-    public CemeteryController(PostgresRepository repository) {
+    public CemeteryController(PostgresRepository repository, IndividualPaymentReportPdfService reportPdfService) {
         this.repository = repository;
+        this.reportPdfService = reportPdfService;
     }
 
     @GetMapping("/api/health")
@@ -61,6 +67,21 @@ public class CemeteryController {
     @GetMapping("/api/admin/reports/individual-payment-record")
     public List<PostgresRepository.IndividualPaymentReportLot> individualPaymentReport() {
         return repository.getIndividualPaymentReport();
+    }
+
+    @GetMapping(path = "/api/admin/reports/individual-payment-record.pdf", produces = MediaType.APPLICATION_PDF_VALUE)
+    public ResponseEntity<byte[]> individualPaymentReportPdf() {
+        try {
+            byte[] pdf = reportPdfService.generate(repository.getIndividualPaymentReport());
+            return ResponseEntity.ok()
+                    .contentType(MediaType.APPLICATION_PDF)
+                    .header("Content-Disposition", ContentDisposition.inline()
+                            .filename("individual-payment-report.pdf").build().toString())
+                    .body(pdf);
+        } catch (IOException | com.lowagie.text.DocumentException exception) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Unable to generate individual payment report PDF", exception);
+        }
     }
 
     @GetMapping("/api/admin/tables/{tableName}")
@@ -311,8 +332,10 @@ public class CemeteryController {
             if (Set.of("PAYMENT", "REFUND").contains(transaction.transactionType()) && amount.signum() == 0) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, prefix + "amount must be greater than zero");
             }
-            if (transaction.lotNumber() != null && transaction.lotNumber() < 1) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, prefix + "lot number must be greater than zero");
+                if (transaction.lotNumber() != null
+                    && (transaction.lotNumber() < 1 || transaction.lotNumber() > 500)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    prefix + "lot number must be between 1 and 500");
             }
             if (transaction.lotNumber() == null) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, prefix + "enter one lot number");

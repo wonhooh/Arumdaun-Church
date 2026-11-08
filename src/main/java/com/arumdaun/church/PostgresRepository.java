@@ -36,9 +36,9 @@ public class PostgresRepository {
     private static final int MAX_CSV_BYTES = 5 * 1024 * 1024;
     private static final int MAX_CSV_ROWS = 10_000;
     private static final Map<String, TableSpec> ADMIN_TABLES = Map.of(
-            "clients", new TableSpec("id"),
-            "lots", new TableSpec("lot_number"),
-            "transactions", new TableSpec("id"));
+            "clients", new TableSpec("id", List.of("id")),
+            "lots", new TableSpec("lot_number", List.of("lot_number")),
+            "transactions", new TableSpec("id", List.of("lot_number", "transaction_date")));
 
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
@@ -60,9 +60,11 @@ public class PostgresRepository {
         }
         List<AdminColumn> tableColumns = loadAdminColumns(tableName);
         List<String> columns = tableColumns.stream().map(AdminColumn::name).toList();
+        String orderBy = table.sortColumns().stream().map(PostgresRepository::quoteIdentifier)
+            .collect(java.util.stream.Collectors.joining(", "));
         String sql = "SELECT " + columns.stream().map(PostgresRepository::quoteIdentifier)
                 .collect(java.util.stream.Collectors.joining(", "))
-                + " FROM " + quoteIdentifier(tableName) + " ORDER BY " + quoteIdentifier(table.keyColumn());
+            + " FROM " + quoteIdentifier(tableName) + " ORDER BY " + orderBy;
         return jdbcTemplate.query(sql, resultSet -> {
             List<List<Object>> rows = new ArrayList<>();
             while (resultSet.next()) {
@@ -323,7 +325,7 @@ public class PostgresRepository {
     public record TableUploadResult(String table, int rowsProcessed) {
     }
 
-    private record TableSpec(String keyColumn) {
+    private record TableSpec(String keyColumn, List<String> sortColumns) {
     }
 
     private record AdminColumn(String name, String dataType, String udtName) {
@@ -455,12 +457,12 @@ public class PostgresRepository {
     }
 
     private static String formatReportTransaction(String type, ReportTransaction transaction) {
-        String amount = transaction.amount() == null ? "" : " " + transaction.amount().toPlainString();
+        String amount = transaction.amount() == null ? "" : " " + DisplayFormats.formatMoney(transaction.amount());
         String method = transaction.method() == null || transaction.method().isBlank()
                 ? "" : " (" + transaction.method().trim() + ")";
         String memo = transaction.memo() == null || transaction.memo().isBlank()
                 ? "" : " - " + transaction.memo().trim();
-        return type + ": " + transaction.date() + amount + method + memo;
+        return type + ": " + DisplayFormats.formatDate(transaction.date()) + amount + method + memo;
     }
 
     public record IndividualPaymentReportLot(

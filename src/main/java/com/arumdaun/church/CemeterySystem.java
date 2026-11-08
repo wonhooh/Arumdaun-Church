@@ -6,7 +6,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.UUID;
@@ -379,10 +378,10 @@ public class CemeterySystem implements Serializable {
             }
         }
 
-        builder.append("Total sale value: ").append(formatMoney(totalSales)).append("\n");
-        builder.append("Total payments received: ").append(formatMoney(totalPayments)).append("\n");
-        builder.append("Total refunds issued: ").append(formatMoney(totalRefunds)).append("\n");
-        builder.append("Net revenue: ").append(formatMoney(totalPayments - totalRefunds)).append("\n\n");
+        builder.append("Total sale value: ").append(DisplayFormats.formatMoney(totalSales)).append("\n");
+        builder.append("Total payments received: ").append(DisplayFormats.formatMoney(totalPayments)).append("\n");
+        builder.append("Total refunds issued: ").append(DisplayFormats.formatMoney(totalRefunds)).append("\n");
+        builder.append("Net revenue: ").append(DisplayFormats.formatMoney(totalPayments - totalRefunds)).append("\n\n");
         builder.append("PURCHASE SUMMARY\n");
         if (purchases.isEmpty()) {
             builder.append("No purchase records yet.\n");
@@ -409,10 +408,6 @@ public class CemeterySystem implements Serializable {
             }
         }
         return null;
-    }
-
-    private String formatMoney(double value) {
-        return String.format(Locale.US, "$%,.2f", value);
     }
 
     static class CemeteryLot implements Serializable {
@@ -465,11 +460,7 @@ public class CemeterySystem implements Serializable {
 
         @Override
         public String toString() {
-            return lotNumber + " | " + formatMoney(price) + " | " + (sold ? "Sold" : "Available");
-        }
-
-        private String formatMoney(double value) {
-            return String.format(Locale.US, "$%,.2f", value);
+            return lotNumber + " | " + DisplayFormats.formatMoney(price) + " | " + (sold ? "Sold" : "Available");
         }
     }
 

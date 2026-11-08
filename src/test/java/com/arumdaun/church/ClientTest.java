@@ -59,6 +59,9 @@ class ClientTest {
 
         assertEquals("Client Id: " + CLIENT_ID + " | Member Id: null | Client Name: 김민수 / Kim, Minsoo | Phones: 010-1234, ",
                 client.toString());
+        Client phoneFormatted = new Client(CLIENT_ID, "김민수", "Kim", "Minsoo", "", "6314561111",
+                "666-444-0000", "", "", "", "");
+        assertTrue(phoneFormatted.toString().contains("Phones: 631-456-1111, 666-444-0000"));
         assertEquals(null, client.getDeletedDate());
     }
 

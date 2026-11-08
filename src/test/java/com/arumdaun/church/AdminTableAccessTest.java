@@ -34,6 +34,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 
 @WebMvcTest(CemeteryController.class)
 @Import(SecurityConfig.class)
@@ -46,6 +48,27 @@ class AdminTableAccessTest {
 
     @MockBean
     private PostgresRepository repository;
+
+    @MockBean
+    private IndividualPaymentReportPdfService reportPdfService;
+
+    @Test
+    void individualPaymentPdfRequiresAdminAndReturnsInlinePdf() throws Exception {
+        byte[] pdf = "%PDF-1.4 test".getBytes(StandardCharsets.US_ASCII);
+        when(repository.getIndividualPaymentReport()).thenReturn(List.of());
+        when(reportPdfService.generate(anyList())).thenReturn(pdf);
+
+        mockMvc.perform(get("/api/admin/reports/individual-payment-record.pdf"))
+                .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(get("/api/admin/reports/individual-payment-record.pdf")
+                        .header("Authorization", ADMIN_AUTHORIZATION))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_PDF))
+                .andExpect(header().string("Content-Disposition",
+                        "inline; filename=\"individual-payment-report.pdf\""))
+                .andExpect(content().bytes(pdf));
+    }
 
     @Test
     void clientManagementPageRequiresAdmin() throws Exception {
@@ -297,6 +320,33 @@ class AdminTableAccessTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.detail").value("Transaction 1: enter one lot number"));
     }
+
+                @Test
+                void transactionLotNumberCannotExceed500() throws Exception {
+                                String request = """
+                                                                {
+                                                                        "client": {
+                                                                                "koreanName": "김민수",
+                                                                                "englishSurname": "Kim",
+                                                                                "englishGivenName": "Minsoo",
+                                                                                "phone1": "010-1234"
+                                                                        },
+                                                                        "transactions": [{
+                                                                                "transactionType": "PURCHASE",
+                                                                                "lotNumber": 501,
+                                                                                "transactionDate": "2026-11-07",
+                                                                                "amount": 0
+                                                                        }]
+                                                                }
+                                                                """;
+
+                                mockMvc.perform(post("/api/admin/clients/with-transactions")
+                                                                                                .header("Authorization", ADMIN_AUTHORIZATION)
+                                                                                                .contentType(MediaType.APPLICATION_JSON)
+                                                                                                .content(request))
+                                                                .andExpect(status().isBadRequest())
+                                                                .andExpect(jsonPath("$.detail").value("Transaction 1: lot number must be between 1 and 500"));
+                }
 
     @Test
     void cancelTransactionTypeCanBeSavedWithoutAmount() throws Exception {

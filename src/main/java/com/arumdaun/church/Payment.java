@@ -2,8 +2,6 @@ package com.arumdaun.church;
 
 import java.io.Serializable;
 import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
-import java.util.Locale;
 import java.util.UUID;
 
 public class Payment implements Serializable {
@@ -60,15 +58,12 @@ public class Payment implements Serializable {
                 .append(" | Client: ").append(clientId)
                 .append(" | Type: ").append(type)
                 .append(" | Method: ").append(method)
-                .append(" | Amount: ").append(formatMoney(amount))
-                .append(" | Date: ").append(date.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")));
+                .append(" | Amount: ").append(DisplayFormats.formatMoney(amount))
+                .append(" | Date: ").append(DisplayFormats.formatDate(date));
         if ("Check".equalsIgnoreCase(method) && checkNumber != null && !checkNumber.isEmpty()) {
             builder.append(" | Check No: ").append(checkNumber);
         }
         return builder.toString();
     }
 
-    private String formatMoney(double value) {
-        return String.format(Locale.US, "$%,.2f", value);
-    }
 }

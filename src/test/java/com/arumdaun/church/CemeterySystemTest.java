@@ -102,8 +102,8 @@ class CemeterySystemTest {
         String report = system.getReportText();
 
         assertTrue(report.contains("CEMETERY SALES REPORT"));
-        assertTrue(report.contains("Total sale value: $2,500.00"));
-        assertTrue(report.contains("Total payments received: $1,000.00"));
+        assertTrue(report.contains("Total sale value: $2,500"));
+        assertTrue(report.contains("Total payments received: $1,000"));
         assertTrue(system.getPaymentHistoryText(UNKNOWN_CLIENT_ID).contains("No payment history found."));
         assertTrue(system.getClientTransactionText(UNKNOWN_CLIENT_ID).contains("No purchase records."));
     }
